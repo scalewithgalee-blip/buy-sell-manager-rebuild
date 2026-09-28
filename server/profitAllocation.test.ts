@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateCapitalBasedProfitShares, calculateProfitSplit } from "./db";
+import { buildCapitalHistoryTimeline, calculateCapitalBasedProfitShares, calculateProfitSplit } from "./db";
 
 describe("capital-based daily profit allocation", () => {
   it.each([
@@ -31,5 +31,15 @@ describe("capital-based daily profit allocation", () => {
 
   it("rejects a zero-capital investor pool instead of inventing a profit split", () => {
     expect(() => calculateCapitalBasedProfitShares(0, 0)).toThrow(/positive current capital/);
+  });
+
+  it("records each posted capital change that changes the future split", () => {
+    const timeline = buildCapitalHistoryTimeline([
+      { id: 1, transactionDate: new Date("2026-09-22T00:00:00Z"), ownerId: 1, transactionType: "capital_contribution", amountCentavos: 14_000_000 },
+      { id: 2, transactionDate: new Date("2026-09-22T00:00:00Z"), ownerId: 2, transactionType: "capital_contribution", amountCentavos: 7_000_000 },
+      { id: 3, transactionDate: new Date("2026-09-23T00:00:00Z"), ownerId: 1, transactionType: "capital_withdrawal", amountCentavos: 7_000_000 },
+    ], 1, 2);
+    expect(timeline.map(entry => [entry.galeShareBasisPoints, entry.nikkiShareBasisPoints])).toEqual([[10_000, 0], [6_667, 3_333], [5_000, 5_000]]);
+    expect(timeline.at(-1)).toMatchObject({ changedOwnerName: "Gale", galeCurrentCapitalCentavos: 7_000_000, nikkiCurrentCapitalCentavos: 7_000_000, dadShareBasisPoints: 0 });
   });
 });

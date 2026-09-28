@@ -348,6 +348,22 @@ export function calculateCapitalBasedProfitShares(galeCapitalCentavos: number, n
     dadShareBasisPoints: 0,
   };
 }
+export function buildCapitalHistoryTimeline(entries: Array<{ id: number; transactionDate: Date; ownerId: number | null; transactionType: string; amountCentavos: number }>, galeId: number, nikkiId: number) {
+  let galeCapitalCentavos = 0;
+  let nikkiCapitalCentavos = 0;
+  let lastGaleShareBasisPoints: number | null = null;
+  return [...entries].sort((a, b) => a.transactionDate.getTime() - b.transactionDate.getTime() || a.id - b.id).reduce<Array<Record<string, unknown>>>((timeline, entry) => {
+    if (entry.ownerId !== galeId && entry.ownerId !== nikkiId) return timeline;
+    const delta = entry.transactionType === "capital_contribution" ? entry.amountCentavos : entry.transactionType === "capital_withdrawal" ? -entry.amountCentavos : 0;
+    if (entry.ownerId === galeId) galeCapitalCentavos += delta;
+    if (entry.ownerId === nikkiId) nikkiCapitalCentavos += delta;
+    const shares = calculateCapitalBasedProfitShares(galeCapitalCentavos, nikkiCapitalCentavos);
+    if (lastGaleShareBasisPoints === shares.galeShareBasisPoints) return timeline;
+    lastGaleShareBasisPoints = shares.galeShareBasisPoints;
+    timeline.push({ id: entry.id, effectiveDate: entry.transactionDate, changedOwnerName: entry.ownerId === galeId ? "Gale" : "Nikki", transactionType: entry.transactionType, amountCentavos: entry.amountCentavos, galeCurrentCapitalCentavos: galeCapitalCentavos, nikkiCurrentCapitalCentavos: nikkiCapitalCentavos, totalInvestorCapitalCentavos: shares.totalInvestorCapitalCentavos, galeShareBasisPoints: shares.galeShareBasisPoints, nikkiShareBasisPoints: shares.nikkiShareBasisPoints, dadShareBasisPoints: shares.dadShareBasisPoints });
+    return timeline;
+  }, []);
+}
 
 /** Keeps the return of capital distinct from actual operating profit in a withdrawal. */
 export function calculateTransitionWithdrawal(capitalReturnCentavos: number, actualGrossProfitCentavos: number) {
@@ -1771,6 +1787,7 @@ export async function getProfitLedgerData(userId: number) {
   const todayStart = dayStart(new Date());
   const todayEnd = nextDay(todayStart);
   const dailyGrossProfitCentavos = sum(entryRows.filter(entry => entry.entryType === "earned" && entry.entryDate >= todayStart && entry.entryDate < todayEnd).map(entry => entry.amountCentavos));
+  const capitalHistoryTimeline = buildCapitalHistoryTimeline(capitalRows, gale.id, nikki.id);
   const ownerSummaries = ownerRows.map(owner => {
     const entries = entryRows.filter(entry => entry.ownerId === owner.id);
     const earnedCentavos = sum(entries.filter(entry => entry.entryType === "earned" || entry.entryType === "adjustment").map(entry => entry.amountCentavos));
@@ -1791,5 +1808,5 @@ export async function getProfitLedgerData(userId: number) {
       currentCapitalCentavos: contributedCentavos - withdrawnCentavos,
     };
   });
-  return { ownerSummaries, entries: entryRows.slice(0, 100), totalInvestorCapitalCentavos: currentShares.totalInvestorCapitalCentavos, dailyGrossProfitCentavos };
+  return { ownerSummaries, entries: entryRows.slice(0, 100), totalInvestorCapitalCentavos: currentShares.totalInvestorCapitalCentavos, dailyGrossProfitCentavos, capitalHistoryTimeline };
 }
