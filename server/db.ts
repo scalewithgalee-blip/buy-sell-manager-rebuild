@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, isNull, like, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, like, lt, lte, or, sql } from "drizzle-orm";
 import { createHash } from "crypto";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { drizzle } from "drizzle-orm/mysql2";
@@ -332,6 +332,23 @@ export function calculateProfitSplit(grossProfitCentavos: number, rules: Array<{
   return allocations;
 }
 
+/** Calculates the future daily-sale split from current Gale/Nikki capital only. Dad remains outside this split. */
+export function calculateCapitalBasedProfitShares(galeCapitalCentavos: number, nikkiCapitalCentavos: number) {
+  const galeCapital = Math.max(0, Math.round(galeCapitalCentavos));
+  const nikkiCapital = Math.max(0, Math.round(nikkiCapitalCentavos));
+  const totalInvestorCapitalCentavos = galeCapital + nikkiCapital;
+  if (totalInvestorCapitalCentavos <= 0) throw new Error("Gale and Nikki must have positive current capital before a daily sale can be allocated.");
+  const galeShareBasisPoints = Math.round(galeCapital * 10_000 / totalInvestorCapitalCentavos);
+  return {
+    totalInvestorCapitalCentavos,
+    galeCapitalCentavos: galeCapital,
+    nikkiCapitalCentavos: nikkiCapital,
+    galeShareBasisPoints,
+    nikkiShareBasisPoints: 10_000 - galeShareBasisPoints,
+    dadShareBasisPoints: 0,
+  };
+}
+
 /** Keeps the return of capital distinct from actual operating profit in a withdrawal. */
 export function calculateTransitionWithdrawal(capitalReturnCentavos: number, actualGrossProfitCentavos: number) {
   const profitDistributionCentavos = Math.max(actualGrossProfitCentavos, 0);
@@ -359,33 +376,38 @@ async function recordAudit(userId: number | null, action: string, entityType: st
 async function ensureDailyProfitSplit(userId: number | null = null) {
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
-  const required = [
-    { name: "Gale", shareBasisPoints: 5_000 },
-    { name: "Nikki", shareBasisPoints: 5_000 },
-    { name: "Nikki's Dad", shareBasisPoints: 0 },
-  ];
-  for (const item of required) {
-    const [owner] = await db.select().from(owners).where(eq(owners.name, item.name)).limit(1);
-    if (!owner) await db.insert(owners).values({ name: item.name, active: true });
+  for (const name of ["Gale", "Nikki", "Nikki's Dad"]) {
+    const [owner] = await db.select().from(owners).where(eq(owners.name, name)).limit(1);
+    if (!owner) await db.insert(owners).values({ name, active: true });
   }
-  const ownerRows = await db.select().from(owners).where(eq(owners.active, true));
-  const ownerByName = new Map(ownerRows.map(owner => [owner.name, owner]));
-  const effectiveFrom = new Date("2026-09-22T12:00:00.000Z");
-  const ruleRows = await db.select().from(ownershipRules).where(eq(ownershipRules.effectiveFrom, effectiveFrom));
-  const existing = new Map(ruleRows.map(rule => [rule.ownerId, rule.shareBasisPoints]));
-  const needsSnapshot = required.some(item => {
-    const owner = ownerByName.get(item.name);
-    return !owner || existing.get(owner.id) !== item.shareBasisPoints;
-  });
-  if (needsSnapshot) {
-    await db.insert(ownershipRules).values(required.map(item => ({
-      ownerId: ownerByName.get(item.name)!.id,
-      shareBasisPoints: item.shareBasisPoints,
-      effectiveFrom,
-      createdBy: userId,
-    })));
-    await recordAudit(userId, "configured", "profit_sharing", undefined, "Configured future daily gross-profit split: Gale 50%, Nikki 50%, Nikki's Dad 0%. Existing profit ledger entries remain unchanged.");
+  // Existing ownership-rule rows remain historical snapshots. New sale snapshots are calculated from capital immediately before allocation.
+}
+
+async function ensureCapitalBasedProfitSnapshot(userId: number | null, saleDate: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const [ownerRows, capitalRows, ruleRows] = await Promise.all([
+    db.select().from(owners).where(eq(owners.active, true)),
+    db.select().from(capitalTransactions).where(and(eq(capitalTransactions.status, "posted"), lt(capitalTransactions.transactionDate, nextDay(saleDate)))),
+    db.select().from(ownershipRules).where(lt(ownershipRules.effectiveFrom, nextDay(saleDate))).orderBy(desc(ownershipRules.effectiveFrom)),
+  ]);
+  const gale = ownerRows.find(owner => owner.name === "Gale");
+  const nikki = ownerRows.find(owner => owner.name === "Nikki");
+  const dad = ownerRows.find(owner => owner.name === "Nikki's Dad");
+  if (!gale || !nikki || !dad) throw new Error("Gale, Nikki, and Nikki's Dad must exist before allocating daily profit.");
+  const currentCapital = (ownerId: number) => capitalRows
+    .filter(entry => entry.ownerId === ownerId)
+    .reduce((total, entry) => total + (entry.transactionType === "capital_contribution" ? entry.amountCentavos : entry.transactionType === "capital_withdrawal" ? -entry.amountCentavos : 0), 0);
+  const shares = calculateCapitalBasedProfitShares(currentCapital(gale.id), currentCapital(nikki.id));
+  const expected = new Map([[gale.id, shares.galeShareBasisPoints], [nikki.id, shares.nikkiShareBasisPoints], [dad.id, shares.dadShareBasisPoints]]);
+  const latestByOwner = new Map<number, typeof ruleRows[number]>();
+  ruleRows.forEach(rule => { if (!latestByOwner.has(rule.ownerId)) latestByOwner.set(rule.ownerId, rule); });
+  const matches = Array.from(expected.entries()).every(([ownerId, shareBasisPoints]) => latestByOwner.get(ownerId)?.shareBasisPoints === shareBasisPoints);
+  if (!matches) {
+    await db.insert(ownershipRules).values(Array.from(expected.entries()).map(([ownerId, shareBasisPoints]) => ({ ownerId, shareBasisPoints, effectiveFrom: new Date(), createdBy: userId })));
+    await recordAudit(userId, "configured", "profit_sharing", undefined, `Configured future daily gross-profit split from current capital: Gale ${(shares.galeShareBasisPoints / 100).toFixed(2)}%, Nikki ${(shares.nikkiShareBasisPoints / 100).toFixed(2)}%, Nikki's Dad 0%. Historical allocations remain unchanged.`, undefined, shares);
   }
+  return { gale, nikki, dad, shares };
 }
 
 async function getProfitRulesForSaleDate(saleDate: Date) {
@@ -1244,6 +1266,7 @@ export async function addSaleRecord(userId: number, input: { date: string; opera
     const paymentId = Number((paymentInsert as any)[0]?.insertId ?? (paymentInsert as any).insertId);
     await db.update(payments).set({ recordCode: makeRecordCode("payment", saleDate, paymentId), updatedBy: userId }).where(eq(payments.id, paymentId));
   }
+  await ensureCapitalBasedProfitSnapshot(userId, saleDate);
   const activeRules = await getProfitRulesForSaleDate(saleDate);
   const profitSplit = calculateProfitSplit(metrics.grossProfitCentavos, activeRules);
   await db.insert(profitAllocations).values(profitSplit.map(rule => ({
@@ -1409,27 +1432,9 @@ export async function reopenBusinessDay(userId: number, dateValue: string, reaso
 }
 
 export async function updateOwnershipRules(userId: number, input: { ownerId: number; sharePercent: number }[]) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is unavailable.");
-  const ownerRows = await db.select().from(owners).where(eq(owners.active, true));
-  const expected = [
-    { name: "Gale", shareBasisPoints: 5_000 },
-    { name: "Nikki", shareBasisPoints: 5_000 },
-    { name: "Nikki's Dad", shareBasisPoints: 0 },
-  ];
-  const expectedByOwnerId = new Map(expected.map(item => [ownerRows.find(owner => owner.name === item.name)?.id, item.shareBasisPoints]));
-  if (input.length !== expected.length || input.some(item => expectedByOwnerId.get(item.ownerId) !== Math.round(item.sharePercent * 100))) {
-    throw new Error("Daily sale profit is locked at 50% Gale, 50% Nikki, and 0% Nikki's Dad. Dad is settled separately.");
-  }
-  const effectiveFrom = new Date();
-  await db.insert(ownershipRules).values(expected.map(item => ({
-    ownerId: ownerRows.find(owner => owner.name === item.name)!.id,
-    shareBasisPoints: item.shareBasisPoints,
-    effectiveFrom,
-    createdBy: userId,
-  })));
-  await recordAudit(userId, "locked", "ownership_rules", undefined, "Kept future daily gross-profit allocation at Gale 50%, Nikki 50%, and Nikki's Dad 0%.");
-  return { success: true };
+  void input;
+  const snapshot = await ensureCapitalBasedProfitSnapshot(userId, new Date());
+  return { success: true, ...snapshot.shares };
 }
 
 export async function updateBusinessSettings(userId: number, input: { minimumInventoryUnits: number; costPerUnitPesos: number; sellingPricePesos: number; unitsPerBox: number; boxCostPesos: number; weeklyUnitsTarget: number; monthlyProfitTargetPesos: number }) {
@@ -1755,6 +1760,17 @@ export async function getProfitLedgerData(userId: number) {
   ]);
   const latestByOwner = new Map<number, typeof ruleRows[number]>();
   ruleRows.forEach(rule => { if (!latestByOwner.has(rule.ownerId)) latestByOwner.set(rule.ownerId, rule); });
+  const gale = ownerRows.find(owner => owner.name === "Gale");
+  const nikki = ownerRows.find(owner => owner.name === "Nikki");
+  if (!gale || !nikki) throw new Error("Gale and Nikki must exist before calculating current profit shares.");
+  const capitalForOwner = (ownerId: number) => capitalRows
+    .filter(entry => entry.ownerId === ownerId)
+    .reduce((total, entry) => total + (entry.transactionType === "capital_contribution" ? entry.amountCentavos : entry.transactionType === "capital_withdrawal" ? -entry.amountCentavos : 0), 0);
+  const currentShares = calculateCapitalBasedProfitShares(capitalForOwner(gale.id), capitalForOwner(nikki.id));
+  const currentShareByOwner = new Map([[gale.id, currentShares.galeShareBasisPoints], [nikki.id, currentShares.nikkiShareBasisPoints]]);
+  const todayStart = dayStart(new Date());
+  const todayEnd = nextDay(todayStart);
+  const dailyGrossProfitCentavos = sum(entryRows.filter(entry => entry.entryType === "earned" && entry.entryDate >= todayStart && entry.entryDate < todayEnd).map(entry => entry.amountCentavos));
   const ownerSummaries = ownerRows.map(owner => {
     const entries = entryRows.filter(entry => entry.ownerId === owner.id);
     const earnedCentavos = sum(entries.filter(entry => entry.entryType === "earned" || entry.entryType === "adjustment").map(entry => entry.amountCentavos));
@@ -1764,7 +1780,9 @@ export async function getProfitLedgerData(userId: number) {
     const withdrawnCentavos = sum(ownerCapital.filter(entry => entry.transactionType === "capital_withdrawal").map(entry => entry.amountCentavos));
     return {
       ...owner,
-      shareBasisPoints: latestByOwner.get(owner.id)?.shareBasisPoints ?? 0,
+      shareBasisPoints: currentShareByOwner.get(owner.id) ?? 0,
+      currentProfitShareBasisPoints: currentShareByOwner.get(owner.id) ?? 0,
+      latestRecordedShareBasisPoints: latestByOwner.get(owner.id)?.shareBasisPoints ?? 0,
       profitEarnedCentavos: earnedCentavos,
       profitDistributedCentavos: distributedCentavos,
       profitOwedCentavos: earnedCentavos - distributedCentavos,
@@ -1773,5 +1791,5 @@ export async function getProfitLedgerData(userId: number) {
       currentCapitalCentavos: contributedCentavos - withdrawnCentavos,
     };
   });
-  return { ownerSummaries, entries: entryRows.slice(0, 100) };
+  return { ownerSummaries, entries: entryRows.slice(0, 100), totalInvestorCapitalCentavos: currentShares.totalInvestorCapitalCentavos, dailyGrossProfitCentavos };
 }
