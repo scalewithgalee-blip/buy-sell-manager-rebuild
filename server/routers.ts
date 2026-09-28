@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { parse as parseCookie } from "cookie";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicAccessProcedure, publicProcedure, router } from "./_core/trpc";
+import { createPublicAccessToken, hasPublicAccess, PUBLIC_ACCESS_COOKIE, PUBLIC_ACCESS_PIN, publicAccessCookieMaxAge } from "./publicAccess";
 import {
   addCapitalTransaction,
   addInventoryPurchase,
@@ -44,18 +46,34 @@ export const appRouter = router({
       return { success: true } as const;
     }),
   }),
+  access: router({
+    status: publicProcedure.query(({ ctx }) => ({ unlocked: Boolean(ctx.user) || hasPublicAccess(ctx.req) })),
+    unlock: publicProcedure
+      .input(z.object({ pin: z.string().length(4) }))
+      .mutation(({ ctx, input }) => {
+        if (input.pin !== PUBLIC_ACCESS_PIN) throw new TRPCError({ code: "UNAUTHORIZED", message: "Incorrect access PIN." });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(PUBLIC_ACCESS_COOKIE, createPublicAccessToken(), { ...cookieOptions, maxAge: publicAccessCookieMaxAge });
+        return { success: true } as const;
+      }),
+    lock: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(PUBLIC_ACCESS_COOKIE, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
+  }),
   business: router({
-    dashboard: publicProcedure.query(({ ctx }) => getDashboardData((ctx.user?.id ?? 0))),
-    dashboardRange: publicProcedure
+    dashboard: publicAccessProcedure.query(({ ctx }) => getDashboardData((ctx.user?.id ?? 0))),
+    dashboardRange: publicAccessProcedure
       .input(z.object({ startDate: day, endDate: day }))
       .query(({ ctx, input }) => getDashboardRangeData((ctx.user?.id ?? 0), input.startDate, input.endDate)),
-    setup: publicProcedure.query(({ ctx }) => getSetupData((ctx.user?.id ?? 0))),
-    profitLedger: publicProcedure.query(({ ctx }) => getProfitLedgerData((ctx.user?.id ?? 0))),
-    transitionReport: publicProcedure.query(({ ctx }) => getTransitionReport((ctx.user?.id ?? 0))),
-    salesHistory: publicProcedure
+    setup: publicAccessProcedure.query(({ ctx }) => getSetupData((ctx.user?.id ?? 0))),
+    profitLedger: publicAccessProcedure.query(({ ctx }) => getProfitLedgerData((ctx.user?.id ?? 0))),
+    transitionReport: publicAccessProcedure.query(({ ctx }) => getTransitionReport((ctx.user?.id ?? 0))),
+    salesHistory: publicAccessProcedure
       .input(z.object({ page: z.number().int().min(1).optional(), pageSize: z.number().int().min(10).max(100).optional(), search: z.string().max(160).optional(), status: z.enum(["all", "active", "voided"]).optional() }))
       .query(({ ctx, input }) => getSalesHistory((ctx.user?.id ?? 0), input)),
-    addSale: publicProcedure
+    addSale: publicAccessProcedure
       .input(z.object({
         date: day,
         operatorId: z.number().int().positive(),
@@ -68,10 +86,10 @@ export const appRouter = router({
         confirmDuplicate: z.boolean().optional(),
       }))
       .mutation(({ ctx, input }) => addSaleRecord((ctx.user?.id ?? 0), input)),
-    voidSale: publicProcedure
+    voidSale: publicAccessProcedure
       .input(z.object({ saleId: z.number().int().positive(), reason: z.string().min(4).max(1_000) }))
       .mutation(({ ctx, input }) => voidSaleRecord((ctx.user?.id ?? 0), input)),
-    addExpense: publicProcedure
+    addExpense: publicAccessProcedure
       .input(z.object({
         date: day,
         category: z.enum(["transportation", "delivery", "packaging", "communication", "operating", "other"]),
@@ -81,7 +99,7 @@ export const appRouter = router({
         notes: z.string().max(2_000).optional(),
       }))
       .mutation(({ ctx, input }) => addExpenseRecord((ctx.user?.id ?? 0), input)),
-    addCapitalTransaction: publicProcedure
+    addCapitalTransaction: publicAccessProcedure
       .input(z.object({
         date: day,
         ownerId: z.number().int().positive().optional(),
@@ -94,7 +112,7 @@ export const appRouter = router({
         notes: z.string().max(2_000).optional(),
       }))
       .mutation(({ ctx, input }) => addCapitalTransaction((ctx.user?.id ?? 0), input)),
-    addInventoryPurchase: publicProcedure
+    addInventoryPurchase: publicAccessProcedure
       .input(z.object({
         date: day,
         boxes: z.number().int().positive().max(1_000),
@@ -104,28 +122,28 @@ export const appRouter = router({
         notes: z.string().max(2_000).optional(),
       }))
       .mutation(({ ctx, input }) => addInventoryPurchase((ctx.user?.id ?? 0), input)),
-    recordProfitDistribution: publicProcedure
+    recordProfitDistribution: publicAccessProcedure
       .input(z.object({ ownerId: z.number().int().positive(), amountPesos: z.number().positive(), date: day, notes: z.string().max(2_000).optional() }))
       .mutation(({ ctx, input }) => recordProfitDistribution((ctx.user?.id ?? 0), input)),
-    closeDay: publicProcedure
+    closeDay: publicAccessProcedure
       .input(z.object({ date: day, notes: z.string().max(2_000).optional() }))
       .mutation(({ ctx, input }) => closeBusinessDay((ctx.user?.id ?? 0), input.date, input.notes)),
-    reopenDay: publicProcedure
+    reopenDay: publicAccessProcedure
       .input(z.object({ date: day, reason: z.string().max(2_000).optional() }))
       .mutation(({ ctx, input }) => reopenBusinessDay((ctx.user?.id ?? 0), input.date, input.reason)),
-    closeInitialPeriod: publicProcedure
+    closeInitialPeriod: publicAccessProcedure
       .input(z.object({ date: day }))
       .mutation(({ ctx, input }) => closeInitialPeriodAndStartOngoing((ctx.user?.id ?? 0), input.date)),
-    recordGaleTransitionWithdrawal: publicProcedure
+    recordGaleTransitionWithdrawal: publicAccessProcedure
       .input(z.object({ date: day }))
       .mutation(({ ctx, input }) => recordGaleTransitionWithdrawal((ctx.user?.id ?? 0), input.date)),
-    updateGuaranteedReturnStatus: publicProcedure
+    updateGuaranteedReturnStatus: publicAccessProcedure
       .input(z.object({ guaranteedReturnId: z.number().int().positive(), status: z.enum(["pending", "earned", "paid", "cancelled"]) }))
       .mutation(({ ctx, input }) => updateGuaranteedReturnStatus((ctx.user?.id ?? 0), input)),
-    updateOwnershipRules: publicProcedure
+    updateOwnershipRules: publicAccessProcedure
       .input(z.array(z.object({ ownerId: z.number().int().positive(), sharePercent: z.number().min(0).max(100) })).min(1))
       .mutation(({ ctx, input }) => updateOwnershipRules((ctx.user?.id ?? 0), input)),
-    updateSettings: publicProcedure
+    updateSettings: publicAccessProcedure
       .input(z.object({
         minimumInventoryUnits: z.number().int().min(0).max(1_000_000),
         costPerUnitPesos: z.number().positive(),
@@ -136,15 +154,15 @@ export const appRouter = router({
         monthlyProfitTargetPesos: z.number().positive().max(1_000_000_000),
       }))
       .mutation(({ ctx, input }) => updateBusinessSettings((ctx.user?.id ?? 0), input)),
-    dataResilience: publicProcedure.query(({ ctx }) => getDataResilienceOverview((ctx.user?.id ?? 0))),
-    runIntegrityCheck: publicProcedure.mutation(({ ctx }) => runIntegrityCheck((ctx.user?.id ?? 0))),
-    createBackup: publicProcedure
+    dataResilience: publicAccessProcedure.query(({ ctx }) => getDataResilienceOverview((ctx.user?.id ?? 0))),
+    runIntegrityCheck: publicAccessProcedure.mutation(({ ctx }) => runIntegrityCheck((ctx.user?.id ?? 0))),
+    createBackup: publicAccessProcedure
       .input(z.object({ type: z.enum(["manual", "daily", "weekly", "monthly"]).default("manual") }))
       .mutation(({ ctx, input }) => createBusinessBackup((ctx.user?.id ?? 0), input.type)),
-    restorePreview: publicProcedure
+    restorePreview: publicAccessProcedure
       .input(z.object({ backupId: z.number().int().positive() }))
       .query(({ input }) => previewBusinessBackup(input.backupId)),
-    configureAutomaticBackups: publicProcedure.mutation(async ({ ctx }) => {
+    configureAutomaticBackups: publicAccessProcedure.mutation(async ({ ctx }) => {
       const sessionToken = parseCookie(ctx.req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
       const overview = await getDataResilienceOverview((ctx.user?.id ?? 0));
       if (overview.backupScheduleTaskUid) return { taskUid: overview.backupScheduleTaskUid, alreadyConfigured: true };
