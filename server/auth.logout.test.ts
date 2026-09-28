@@ -85,7 +85,7 @@ describe("required cigarette sale calculations", () => {
     expect(split.map(item => item.amountCentavos)).toEqual([1_500, 1_500]);
   });
 
-  it("auto-calculates cash as cost plus ₱30 profit per pack or rim", () => {
+  it("auto-calculates cash as cost plus ₱30 profit per pack or ream", () => {
     const totals = calculateAutoSaleTotals(97, 70_000);
     expect(totals.sellingPriceCentavos).toBe(73_000);
     expect(totals.expectedRevenueCentavos).toBe(7_081_000); // ₱7,081
@@ -149,7 +149,7 @@ describe("required cigarette sale calculations", () => {
     expect(alerts[0]).toMatchObject({ kind: "cash_shortage", tone: "warning", title: "Cash shortage needs review", date: "2026-09-25" });
     expect(alerts[0]?.message).toContain("2 active sales are short by ₱500");
     expect(alerts[1]).toMatchObject({ kind: "goal_reached", tone: "success", title: "Weekly goal reached", date: "2026-09-25" });
-    expect(alerts[1]?.message).toContain("500 packs/rims sold");
+    expect(alerts[1]?.message).toContain("500 packs/reams sold");
   });
 
   it("shows no business alert while the goal is pending and cash reconciles", () => {

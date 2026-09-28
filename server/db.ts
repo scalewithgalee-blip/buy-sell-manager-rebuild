@@ -844,7 +844,7 @@ export function calculateBusinessAlerts(input: { now: Date; sales: BusinessAlert
       kind: "goal_reached",
       tone: "success",
       title: "Weekly goal reached",
-      message: `${input.currentWeekUnitsSold.toLocaleString("en-PH")} packs/rims sold against the ${input.weeklyTargetUnits.toLocaleString("en-PH")} target.`,
+      message: `${input.currentWeekUnitsSold.toLocaleString("en-PH")} packs/reams sold against the ${input.weeklyTargetUnits.toLocaleString("en-PH")} target.`,
       date: dayKey(input.now),
     });
   }
