@@ -6,6 +6,8 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
+import { runBusinessBackupSchedule } from "../backupSchedule";
+import { downloadBusinessBackup } from "../backupDownload";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 
@@ -36,6 +38,8 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  app.post("/api/scheduled/business-backup", runBusinessBackupSchedule);
+  app.get("/api/backups/:id/download", downloadBusinessBackup);
   // tRPC API
   app.use(
     "/api/trpc",

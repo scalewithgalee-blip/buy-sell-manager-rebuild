@@ -1,0 +1,1 @@
+ALTER TABLE `businessSettings` ADD `weeklyUnitsTarget` int DEFAULT 100 NOT NULL;

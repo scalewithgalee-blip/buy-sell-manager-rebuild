@@ -1,0 +1,1 @@
+ALTER TABLE `inventoryTransactions` ADD `inventoryFundingSource` enum('retained_cash','new_capital','other') DEFAULT 'retained_cash' NOT NULL;

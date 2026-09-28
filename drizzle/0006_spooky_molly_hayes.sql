@@ -1,0 +1,1 @@
+ALTER TABLE `dailyClosings` MODIFY COLUMN `closingStatus` enum('reconciled','needs_review','reopened') NOT NULL;

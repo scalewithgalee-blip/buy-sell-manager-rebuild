@@ -1,0 +1,1 @@
+ALTER TABLE `businessSettings` ADD `monthlyProfitTargetCentavos` int DEFAULT 5000000 NOT NULL;
