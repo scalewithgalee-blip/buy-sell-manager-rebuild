@@ -2679,6 +2679,16 @@ export async function addInventoryPurchase(
   if (input.fundingSource === "new_capital" && !input.ownerId) {
     throw new Error("Select the owner providing the new capital.");
   }
+  if (input.fundingSource === "new_capital") {
+    const [capitalOwner] = await db
+      .select({ id: owners.id, name: owners.name })
+      .from(owners)
+      .where(eq(owners.id, input.ownerId!))
+      .limit(1);
+    if (!capitalOwner) {
+      throw new Error("The selected capital provider does not exist.");
+    }
+  }
   if (input.fundingSource === "retained_cash") {
     const [saleRows, inventoryRows] = await Promise.all([
       db.select().from(sales),

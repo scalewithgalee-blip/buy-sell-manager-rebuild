@@ -2247,6 +2247,17 @@ export default function Home() {
                     </option>
                   ))}
               </select>
+              <p className="mt-1 text-xs leading-5 text-[#5b4de1]">
+                This will post{" "}
+                {peso(
+                  (Number(inventoryPurchase.boxes) || 0) *
+                    (Number(
+                      inventoryPurchase.costPerBox ||
+                        dashboard.settings.boxCostCentavos / 100
+                    ) || 0)
+                )}{" "}
+                to the selected owner’s capital.
+              </p>
             </div>
           )}
           <div className="mt-3">
