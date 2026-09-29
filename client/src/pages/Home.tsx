@@ -754,7 +754,8 @@ export default function Home() {
     0
   );
   const nextBoxFundCentavos = Number(
-    dashboard.nextBoxFundCentavos ??
+    dashboard.nextBoxFundTodayCentavos ??
+      dashboard.nextBoxFundCentavos ??
       dashboard.nextBoxFund?.availableCentavos ??
       0
   );
@@ -1341,14 +1342,14 @@ export default function Home() {
           icon={Package}
         />
         <MetricCard
-          label="Next Box Fund"
+          label="Today's Next Box Fund"
           value={peso(nextBoxFundCentavos)}
           hint={
             showRetainedCashBreakdown
               ? "Click to hide business position"
               : "Click to view business position"
           }
-          info="Owner capital available for the next inventory cycle after posted capital withdrawals. Profit distributions are payouts of earned profit and do not reduce owner capital."
+          info="Today’s Next Box Fund is the COGS recovered from today’s valid sales. The cumulative replacement balance remains separate for purchase controls."
           tone="teal"
           icon={Wallet}
           onClick={() => setShowRetainedCashBreakdown(current => !current)}
@@ -2031,9 +2032,9 @@ export default function Home() {
           icon={Banknote}
         />
         <MetricCard
-          label="Next Box Fund"
+          label="Today's Next Box Fund"
           value={peso(nextBoxFundCentavos)}
-          hint="Recovered COGS available for replacement inventory"
+          hint="Today’s COGS recovered from today’s sales"
           tone="teal"
           icon={Wallet}
         />
@@ -3031,13 +3032,13 @@ export default function Home() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <section className="panel p-5">
           <p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#6d5dfc]">
-            Replacement cycle
+            Today's replacement cycle
           </p>
           <p className="mt-3 text-2xl font-semibold text-[#17182b]">
             {peso(nextBoxFundCentavos)}
           </p>
           <p className="mt-2 text-sm text-[#8d90a2]">
-            Next Box Fund available from recovered COGS.
+            Today’s COGS recovered from today’s sales.
           </p>
         </section>
         {(["week", "month", "quarter", "year"] as const).map(key => (

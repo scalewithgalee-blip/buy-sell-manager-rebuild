@@ -1759,6 +1759,13 @@ export async function getDashboardData(userId: number) {
     sales: salesRows,
     inventory: currentInventoryRows,
   });
+  const todayMetrics = periodMetrics(
+    salesRows,
+    expenseRows,
+    todayRange.start,
+    todayRange.end
+  );
+  const nextBoxFundTodayCentavos = todayMetrics.cogsCentavos;
   const receivables: never[] = [];
   const outstandingReceivablesCentavos = 0;
   const weekMetrics = periodMetrics(
@@ -1954,6 +1961,7 @@ export async function getDashboardData(userId: number) {
     operatingCash: retainedCash,
     nextBoxFund,
     nextBoxFundCentavos: nextBoxFund.availableCentavos,
+    nextBoxFundTodayCentavos,
     businessPosition,
     totalOwnerCapitalCentavos,
     capitalDeployedCentavos: businessPosition.capitalDeployedCentavos,
@@ -1966,12 +1974,7 @@ export async function getDashboardData(userId: number) {
     salesVelocity,
     estimatedDaysUntilStockout,
     periods: {
-      today: periodMetrics(
-        salesRows,
-        expenseRows,
-        todayRange.start,
-        todayRange.end
-      ),
+      today: todayMetrics,
       week: weekMetrics,
       previousWeek: previousWeekMetrics,
       month: monthMetrics,
