@@ -575,6 +575,72 @@ export function calculateNextBoxFundBalance(input: {
     ),
   };
 }
+
+/** Daily replacement balance: today’s recovered COGS less today’s post-sale replacements. */
+export function calculateTodayNextBoxFundBalance(input: {
+  todayCogsRecoveredCentavos: number;
+  todayStart: Date;
+  todayEnd: Date;
+  sales: Array<{
+    saleDate: Date;
+    createdAt?: Date | string | null;
+    isVoided: boolean;
+  }>;
+  inventory: Array<{
+    transactionDate: Date;
+    createdAt?: Date | string | null;
+    transactionType: string;
+    fundingSource?: string | null;
+    description?: string | null;
+    unitsDelta: number;
+    costPerUnitCentavos: number;
+  }>;
+}) {
+  const eventTime = (
+    value: Date | string | null | undefined,
+    fallback: Date
+  ) =>
+    value instanceof Date
+      ? value.getTime()
+      : value
+        ? Date.parse(String(value))
+        : fallback.getTime();
+  const firstSaleTime = Math.min(
+    ...input.sales
+      .filter(
+        sale =>
+          !sale.isVoided &&
+          sale.saleDate >= input.todayStart &&
+          sale.saleDate < input.todayEnd
+      )
+      .map(sale => eventTime(sale.createdAt, sale.saleDate))
+  );
+  const replacementPurchasesCentavos = sum(
+    input.inventory
+      .filter(item => {
+        const purchaseTime = eventTime(item.createdAt, item.transactionDate);
+        return (
+          item.transactionType === "purchase" &&
+          item.fundingSource === "retained_cash" &&
+          item.description?.startsWith("Purchased ") &&
+          item.transactionDate >= input.todayStart &&
+          item.transactionDate < input.todayEnd &&
+          Number.isFinite(firstSaleTime) &&
+          purchaseTime > firstSaleTime
+        );
+      })
+      .map(item => Math.max(0, item.unitsDelta) * item.costPerUnitCentavos)
+  );
+  return {
+    cogsRecoveredCentavos: Math.max(0, input.todayCogsRecoveredCentavos),
+    replacementPurchasesCentavos,
+    availableCentavos: Math.max(
+      0,
+      Math.max(0, input.todayCogsRecoveredCentavos) -
+        replacementPurchasesCentavos
+    ),
+  };
+}
 /** Allocates gross profit only; capital/COGS is never included in owner profit. */
 export function calculateProfitSplit(
   grossProfitCentavos: number,
@@ -1765,7 +1831,13 @@ export async function getDashboardData(userId: number) {
     todayRange.start,
     todayRange.end
   );
-  const nextBoxFundTodayCentavos = todayMetrics.cogsCentavos;
+  const nextBoxFundToday = calculateTodayNextBoxFundBalance({
+    todayCogsRecoveredCentavos: todayMetrics.cogsCentavos,
+    todayStart: todayRange.start,
+    todayEnd: todayRange.end,
+    sales: salesRows,
+    inventory: currentInventoryRows,
+  });
   const receivables: never[] = [];
   const outstandingReceivablesCentavos = 0;
   const weekMetrics = periodMetrics(
@@ -1961,7 +2033,8 @@ export async function getDashboardData(userId: number) {
     operatingCash: retainedCash,
     nextBoxFund,
     nextBoxFundCentavos: nextBoxFund.availableCentavos,
-    nextBoxFundTodayCentavos,
+    nextBoxFundTodayCentavos: nextBoxFundToday.availableCentavos,
+    nextBoxFundToday,
     businessPosition,
     totalOwnerCapitalCentavos,
     capitalDeployedCentavos: businessPosition.capitalDeployedCentavos,
