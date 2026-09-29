@@ -141,6 +141,7 @@ const demo = {
   inventoryBoxes: 6,
   inventoryValueCentavos: 21000000,
   totalOwnerCapitalCentavos: 21000000,
+  nextBoxFundCentavos: 0,
   capitalDeployedCentavos: 21000000,
   capitalDeploymentPercent: 100,
   totalProfitEarnedCentavos: 0,
@@ -282,7 +283,7 @@ const demo = {
   insights: [
     {
       tone: "good" as const,
-      text: "Inventory reconciliation ready: 205 units / 4.1 box equivalent, with the live sales and capital ledger ready to track.",
+      text: "Inventory reconciliation ready: 300 units / 6 box equivalent, with the live sales and capital ledger ready to track.",
     },
   ],
   recentSales: [],
@@ -291,8 +292,8 @@ const demo = {
       id: 1,
       transactionDate: new Date("2026-09-22T00:00:00.000Z"),
       transactionType: "initial",
-      unitsDelta: 205,
-      description: "Physical inventory count  -  205 units",
+      unitsDelta: 300,
+      description: "Physical inventory count  -  300 units",
     },
   ],
   receivables: [],
@@ -652,6 +653,7 @@ export default function Home() {
     boxes: "",
     costPerBox: "",
     fundingSource: "retained_cash" as "retained_cash" | "new_capital" | "other",
+    ownerId: "",
     notes: "",
   });
   const [capital, setCapital] = useState({
@@ -751,8 +753,11 @@ export default function Home() {
       total + Number(owner.capitalWithdrawnCentavos ?? 0),
     0
   );
-  const nextBoxFundCentavos =
-    ownerCapitalCentavos - postedCapitalWithdrawalsCentavos;
+  const nextBoxFundCentavos = Number(
+    dashboard.nextBoxFundCentavos ??
+      dashboard.nextBoxFund?.availableCentavos ??
+      0
+  );
   const setup = setupQuery.data;
   const resilience = resilienceQuery.data as any;
   const restorePreview = restorePreviewQuery.data as any;
@@ -762,7 +767,7 @@ export default function Home() {
       {
         id: 1,
         name: "Gale",
-        shareBasisPoints: 5000,
+        shareBasisPoints: 6667,
         profitEarnedCentavos: 0,
         profitDistributedCentavos: 0,
         profitOwedCentavos: 0,
@@ -773,7 +778,7 @@ export default function Home() {
       {
         id: 2,
         name: "Nikki",
-        shareBasisPoints: 5000,
+        shareBasisPoints: 3333,
         profitEarnedCentavos: 0,
         profitDistributedCentavos: 0,
         profitOwedCentavos: 0,
@@ -890,6 +895,7 @@ export default function Home() {
         boxes: "",
         costPerBox: "",
         fundingSource: "retained_cash",
+        ownerId: "",
         notes: "",
       });
       utils.business.dashboard.invalidate();
@@ -2009,7 +2015,7 @@ export default function Home() {
         info="Inventory is the physical stock ledger. Purchases add units; sales, losses, and adjustments reduce or correct units through retained records."
         copy="Stock only moves through a recorded opening balance, purchase, sale, loss, adjustment, or reversal."
       />
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-4">
         <MetricCard
           label="Units remaining"
           value={`${number(dashboard.inventoryUnits)} units`}
@@ -2023,6 +2029,13 @@ export default function Home() {
           hint={`${peso(dashboard.settings.defaultCostPerUnitCentavos)} acquisition cost per unit`}
           tone="amber"
           icon={Banknote}
+        />
+        <MetricCard
+          label="Next Box Fund"
+          value={peso(nextBoxFundCentavos)}
+          hint="Recovered COGS available for replacement inventory"
+          tone="teal"
+          icon={Wallet}
         />
         <MetricCard
           label="Restock threshold"
@@ -2057,6 +2070,10 @@ export default function Home() {
               unitsPerBox: dashboard.settings.unitsPerBox,
               costPerBoxPesos: costPerBox,
               fundingSource: inventoryPurchase.fundingSource,
+              ownerId:
+                inventoryPurchase.fundingSource === "new_capital"
+                  ? Number(inventoryPurchase.ownerId)
+                  : undefined,
               notes: inventoryPurchase.notes || undefined,
             });
           }}
@@ -2069,9 +2086,10 @@ export default function Home() {
             Add additional boxes
           </h3>
           <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
-            Record new stock when you purchase more boxes. Reinvesting operating
-            cash adds inventory without creating new owner capital; record
-            separate owner contributions in Money.
+            Record new stock when you purchase more boxes. Next Box Fund
+            purchases consume recovered COGS without changing owner capital or
+            profit; new owner capital is recorded as a separate capital
+            contribution.
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
@@ -2173,7 +2191,7 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-3">
-            <Label info="Operating cash means proceeds from prior sales are being reinvested. Choose new owner capital only when owners add fresh funds.">
+            <Label info="Next Box Fund is recovered COGS from inventory already sold. New owner capital is a separate source that changes capital and future profit shares.">
               Funding source
             </Label>
             <select
@@ -2190,19 +2208,46 @@ export default function Home() {
               className="field mt-1"
             >
               <option value="retained_cash">
-                Operating cash from prior sales
+                Next Box Fund from recovered COGS
               </option>
               <option value="new_capital">
-                New owner capital (record separately in Money)
+                New Owner Capital (linked contribution)
               </option>
               <option value="other">Other funding</option>
             </select>
             <p className="mt-1 text-xs leading-5 text-[#8d90a2]">
-              Choose operating cash when you are recycling the cost of boxes
-              already sold. This adds inventory without increasing Gale or
-              Nikki’s contributed capital.
+              Choose Next Box Fund when replacing inventory sold previously.
+              This adds inventory, consumes recovered COGS, and does not change
+              owner capital or profit.
             </p>
           </div>
+          {inventoryPurchase.fundingSource === "new_capital" && (
+            <div className="mt-3">
+              <Label info="The selected owner will receive a posted capital contribution equal to this inventory purchase total.">
+                Capital provider
+              </Label>
+              <select
+                required
+                value={inventoryPurchase.ownerId}
+                onChange={e =>
+                  setInventoryPurchase({
+                    ...inventoryPurchase,
+                    ownerId: e.target.value,
+                  })
+                }
+                className="field mt-1"
+              >
+                <option value="">Select owner</option>
+                {(dashboard.ownerSummaries ?? [])
+                  .filter((owner: any) => owner.name !== "Nikki's Dad")
+                  .map((owner: any) => (
+                    <option key={owner.id} value={owner.id}>
+                      {owner.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
           <div className="mt-3">
             <Label>Optional note</Label>
             <input
@@ -2253,7 +2298,7 @@ export default function Home() {
                         {" "}
                         ·{" "}
                         {item.fundingSource === "retained_cash"
-                          ? "operating cash"
+                          ? "Next Box Fund"
                           : item.fundingSource === "new_capital"
                             ? "new owner capital"
                             : item.fundingSource === "other"
@@ -2983,7 +3028,18 @@ export default function Home() {
         info="Reports summarize recorded transactions. Weeks always run Monday through Sunday, and target history keeps the goal saved for each week."
         copy="Review sales, goals, and cash collection differences using recorded ledger data only."
       />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className="panel p-5">
+          <p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#6d5dfc]">
+            Replacement cycle
+          </p>
+          <p className="mt-3 text-2xl font-semibold text-[#17182b]">
+            {peso(nextBoxFundCentavos)}
+          </p>
+          <p className="mt-2 text-sm text-[#8d90a2]">
+            Next Box Fund available from recovered COGS.
+          </p>
+        </section>
         {(["week", "month", "quarter", "year"] as const).map(key => (
           <section key={key} className="panel p-5">
             <p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#6d5dfc]">

@@ -461,15 +461,6 @@ export function calculateBusinessPosition(input: {
   };
 }
 
-export function calculateNextBoxFund(
-  ownerCapitalCentavos: number,
-  profitDistributionsCentavos: number,
-  postedCapitalWithdrawalsCentavos: number
-) {
-  void profitDistributionsCentavos;
-  return ownerCapitalCentavos - postedCapitalWithdrawalsCentavos;
-}
-
 export function calculateInventoryPurchase(
   boxes: number,
   unitsPerBox: number,
@@ -549,6 +540,39 @@ export function calculateRetainedCashBalance(input: {
   };
 }
 
+/** Canonical replacement-cycle balance: recovered COGS less replacement purchases. */
+export function calculateNextBoxFundBalance(input: {
+  sales: Array<{ cogsCentavos: number; isVoided: boolean }>;
+  inventory: Array<{
+    transactionType: string;
+    fundingSource?: string | null;
+    unitsDelta: number;
+    costPerUnitCentavos: number;
+  }>;
+}) {
+  const cogsRecoveredCentavos = sum(
+    input.sales
+      .filter(sale => !sale.isVoided)
+      .map(sale => Math.max(0, sale.cogsCentavos))
+  );
+  const replacementPurchasesCentavos = sum(
+    input.inventory
+      .filter(
+        item =>
+          item.transactionType === "purchase" &&
+          item.fundingSource === "retained_cash"
+      )
+      .map(item => Math.max(0, item.unitsDelta) * item.costPerUnitCentavos)
+  );
+  return {
+    cogsRecoveredCentavos,
+    replacementPurchasesCentavos,
+    availableCentavos: Math.max(
+      0,
+      cogsRecoveredCentavos - replacementPurchasesCentavos
+    ),
+  };
+}
 /** Allocates gross profit only; capital/COGS is never included in owner profit. */
 export function calculateProfitSplit(
   grossProfitCentavos: number,
@@ -1729,6 +1753,10 @@ export async function getDashboardData(userId: number) {
     capital: capitalRows,
     profitLedger: profitLedgerRows,
   });
+  const nextBoxFund = calculateNextBoxFundBalance({
+    sales: salesRows,
+    inventory: currentInventoryRows,
+  });
   const receivables: never[] = [];
   const outstandingReceivablesCentavos = 0;
   const weekMetrics = periodMetrics(
@@ -1922,6 +1950,8 @@ export async function getDashboardData(userId: number) {
     inventoryValueCentavos,
     retainedCash,
     operatingCash: retainedCash,
+    nextBoxFund,
+    nextBoxFundCentavos: nextBoxFund.availableCentavos,
     businessPosition,
     totalOwnerCapitalCentavos,
     capitalDeployedCentavos: businessPosition.capitalDeployedCentavos,
@@ -2619,6 +2649,7 @@ export async function addInventoryPurchase(
     unitsPerBox: number;
     costPerBoxPesos: number;
     fundingSource: "retained_cash" | "new_capital" | "other";
+    ownerId?: number;
     notes?: string;
   }
 ) {
@@ -2640,6 +2671,24 @@ export async function addInventoryPurchase(
     input.unitsPerBox,
     pesoToCentavos(input.costPerBoxPesos)
   );
+  if (input.fundingSource === "new_capital" && !input.ownerId) {
+    throw new Error("Select the owner providing the new capital.");
+  }
+  if (input.fundingSource === "retained_cash") {
+    const [saleRows, inventoryRows] = await Promise.all([
+      db.select().from(sales),
+      db.select().from(inventoryTransactions),
+    ]);
+    const nextBoxFund = calculateNextBoxFundBalance({
+      sales: saleRows,
+      inventory: inventoryRows,
+    });
+    if (purchase.totalCostCentavos > nextBoxFund.availableCentavos) {
+      throw new Error(
+        `Next Box Fund has only ₱${(nextBoxFund.availableCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })} available for this purchase.`
+      );
+    }
+  }
   const transactionDate = dateAtNoonUtc(input.date);
   const inserted = await db.insert(inventoryTransactions).values({
     transactionDate,
@@ -2662,6 +2711,29 @@ export async function addInventoryPurchase(
     .update(inventoryTransactions)
     .set({ recordCode, updatedBy: userId })
     .where(eq(inventoryTransactions.id, id));
+  if (input.fundingSource === "new_capital") {
+    const capitalInsert = await db.insert(capitalTransactions).values({
+      transactionDate,
+      ownerId: input.ownerId!,
+      transactionType: "capital_contribution",
+      status: "posted",
+      amountCentavos: purchase.totalCostCentavos,
+      description: `Capital contribution used for ${input.boxes} ${input.boxes === 1 ? "box" : "boxes"}`,
+      notes:
+        input.notes?.trim() || "Linked automatically to inventory purchase.",
+      createdBy: userId,
+    });
+    const capitalId = Number(
+      (capitalInsert as any)[0]?.insertId ?? (capitalInsert as any).insertId
+    );
+    await db
+      .update(capitalTransactions)
+      .set({
+        recordCode: makeRecordCode("capital", transactionDate, capitalId),
+        updatedBy: userId,
+      })
+      .where(eq(capitalTransactions.id, capitalId));
+  }
   await recordAudit(
     userId,
     "created",
