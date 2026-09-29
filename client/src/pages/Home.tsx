@@ -739,6 +739,22 @@ export default function Home() {
     Record<string, any>;
   const operatingCash =
     dashboard.operatingCash ?? dashboard.retainedCash ?? demo.retainedCash;
+  const ownerCapitalCentavos = (dashboard.ownerSummaries ?? []).reduce(
+    (total: number, owner: any) =>
+      total + Number(owner.currentCapitalCentavos ?? 0),
+    0
+  );
+  const postedCapitalWithdrawalsCentavos = (
+    dashboard.ownerSummaries ?? []
+  ).reduce(
+    (total: number, owner: any) =>
+      total + Number(owner.capitalWithdrawnCentavos ?? 0),
+    0
+  );
+  const nextBoxFundCentavos =
+    ownerCapitalCentavos -
+    Number(operatingCash.profitDistributionsCentavos ?? 0) -
+    postedCapitalWithdrawalsCentavos;
   const setup = setupQuery.data;
   const resilience = resilienceQuery.data as any;
   const restorePreview = restorePreviewQuery.data as any;
@@ -1365,14 +1381,15 @@ export default function Home() {
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#eeeef4] px-5 py-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
-                Cash-flow breakdown
+                Business position
               </p>
               <h3 className="mt-1 text-lg font-semibold text-[#17182b]">
-                How operating cash is calculated
+                Owner capital and next box fund
               </h3>
               <p className="mt-1 max-w-2xl text-sm leading-5 text-[#8d90a2]">
-                This is actual recorded business cash flow from sales and cash
-                outflows. It is separate from owner capital and inventory value.
+                Owner capital less profit distributions and posted capital
+                withdrawals. This calculation does not change any ledger
+                records.
               </p>
             </div>
             <button
@@ -1381,6 +1398,52 @@ export default function Home() {
             >
               Hide details
             </button>
+          </div>
+          <div className="grid gap-3 border-b border-[#eeeef4] p-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg bg-[#f0efff] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
+                Owner capital
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#5b4de1]">
+                {peso(ownerCapitalCentavos)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-[#fff1ef] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
+                Profit distributions paid
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#9d3f35]">
+                −{peso(operatingCash.profitDistributionsCentavos)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-[#fff1ef] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
+                Posted capital withdrawals
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#9d3f35]">
+                −{peso(postedCapitalWithdrawalsCentavos)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-[#f0efff] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
+                Next box fund
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#5b4de1]">
+                {peso(nextBoxFundCentavos)}
+              </p>
+              <p className="mt-1 text-[11px] text-[#8d90a2]">
+                Owner capital − distributions − withdrawals
+              </p>
+            </div>
+          </div>
+          <div className="border-b border-[#eeeef4] px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
+              Operating cash breakdown
+            </p>
+            <p className="mt-1 text-sm text-[#8d90a2]">
+              Sales cash less recorded operating outflows. Owner capital is
+              shown above and is not included here.
+            </p>
           </div>
           <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-lg bg-[#f0efff] p-3">

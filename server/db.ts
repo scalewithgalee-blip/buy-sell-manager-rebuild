@@ -461,6 +461,18 @@ export function calculateBusinessPosition(input: {
   };
 }
 
+export function calculateNextBoxFund(
+  ownerCapitalCentavos: number,
+  profitDistributionsCentavos: number,
+  postedCapitalWithdrawalsCentavos: number
+) {
+  return (
+    ownerCapitalCentavos -
+    profitDistributionsCentavos -
+    postedCapitalWithdrawalsCentavos
+  );
+}
+
 export function calculateInventoryPurchase(
   boxes: number,
   unitsPerBox: number,
@@ -750,16 +762,14 @@ async function ensureCapitalBasedProfitSnapshot(
       latestByOwner.get(ownerId)?.shareBasisPoints === shareBasisPoints
   );
   if (!matches) {
-    await db
-      .insert(ownershipRules)
-      .values(
-        Array.from(expected.entries()).map(([ownerId, shareBasisPoints]) => ({
-          ownerId,
-          shareBasisPoints,
-          effectiveFrom: new Date(),
-          createdBy: userId,
-        }))
-      );
+    await db.insert(ownershipRules).values(
+      Array.from(expected.entries()).map(([ownerId, shareBasisPoints]) => ({
+        ownerId,
+        shareBasisPoints,
+        effectiveFrom: new Date(),
+        createdBy: userId,
+      }))
+    );
     await recordAudit(
       userId,
       "configured",
@@ -1345,14 +1355,12 @@ async function saveCurrentWeeklyTargetSnapshot(
     .where(eq(weeklyTargetSnapshots.weekStartDate, weekStartDate))
     .limit(1);
   if (!existing) {
-    await db
-      .insert(weeklyTargetSnapshots)
-      .values({
-        weekStartDate,
-        targetUnits,
-        createdBy: userId,
-        updatedBy: userId,
-      });
+    await db.insert(weeklyTargetSnapshots).values({
+      weekStartDate,
+      targetUnits,
+      createdBy: userId,
+      updatedBy: userId,
+    });
   } else if (existing.targetUnits !== targetUnits) {
     await db
       .update(weeklyTargetSnapshots)
@@ -2379,15 +2387,13 @@ export async function addSaleRecord(
     })
     .where(eq(inventoryTransactions.id, inventoryId));
   if (metrics.amountCollectedCentavos > 0) {
-    const paymentInsert = await db
-      .insert(payments)
-      .values({
-        saleId,
-        paymentDate: saleDate,
-        amountCentavos: metrics.amountCollectedCentavos,
-        note: "Immediate payment",
-        createdBy: userId,
-      });
+    const paymentInsert = await db.insert(payments).values({
+      saleId,
+      paymentDate: saleDate,
+      amountCentavos: metrics.amountCollectedCentavos,
+      note: "Immediate payment",
+      createdBy: userId,
+    });
     const paymentId = Number(
       (paymentInsert as any)[0]?.insertId ?? (paymentInsert as any).insertId
     );
@@ -2478,15 +2484,13 @@ export async function recordCustomerPayment(
     );
   const amountCollectedCentavos = sale.amountCollectedCentavos + amountCentavos;
   const balanceCentavos = sale.amountDueCentavos - amountCollectedCentavos;
-  await db
-    .insert(payments)
-    .values({
-      saleId: sale.id,
-      paymentDate: dateAtNoonUtc(input.paymentDate),
-      amountCentavos,
-      note: input.note?.trim() || null,
-      createdBy: userId,
-    });
+  await db.insert(payments).values({
+    saleId: sale.id,
+    paymentDate: dateAtNoonUtc(input.paymentDate),
+    amountCentavos,
+    note: input.note?.trim() || null,
+    createdBy: userId,
+  });
   await db
     .update(sales)
     .set({
@@ -3238,15 +3242,13 @@ export async function createBusinessBackup(
     .limit(1);
   if (existing) return { ...existing, reused: true };
   const pendingCode = `BKP-PENDING-${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`;
-  const inserted = await db
-    .insert(backupRecords)
-    .values({
-      recordCode: pendingCode,
-      backupType: type,
-      status: "started",
-      retentionUntil: backupRetentionDate(type, now),
-      createdBy: userId,
-    });
+  const inserted = await db.insert(backupRecords).values({
+    recordCode: pendingCode,
+    backupType: type,
+    status: "started",
+    retentionUntil: backupRetentionDate(type, now),
+    createdBy: userId,
+  });
   const backupId = Number(
     (inserted as any)[0]?.insertId ?? (inserted as any).insertId
   );
@@ -3435,14 +3437,12 @@ export async function runIntegrityCheck(userId: number | null) {
     latestClosingCode: latestClose?.recordCode ?? null,
     checkedSales: activeSales.length,
   };
-  const inserted = await db
-    .insert(integrityChecks)
-    .values({
-      recordCode: pendingCode,
-      ...metrics,
-      details: JSON.stringify(details),
-      checkedBy: userId,
-    });
+  const inserted = await db.insert(integrityChecks).values({
+    recordCode: pendingCode,
+    ...metrics,
+    details: JSON.stringify(details),
+    checkedBy: userId,
+  });
   const id = Number(
     (inserted as any)[0]?.insertId ?? (inserted as any).insertId
   );

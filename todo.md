@@ -13,3 +13,5 @@
 - [x] Verify historical sales, profit allocations, distributions, owed profit, and capital records are unchanged.
 - [x] Run 32 unit tests, TypeScript checks, the production build, and live UI verification.
 - [x] Prepare the verified final WebDev checkpoint.
+- [x] Add Business Position breakdown: owner capital, profit distributions paid, posted capital withdrawals, and calculated Next Box Fund.
+- [x] Verify the live UI shows ₱210,000 − ₱19,860 − ₱0 = ₱190,140.

@@ -9,6 +9,7 @@ import {
   calculateIntegrityMetrics,
   calculateInventoryPurchase,
   calculateInventoryValue,
+  calculateNextBoxFund,
   calculateProfitSplit,
   calculateRetainedCashBalance,
   calculateSaleMetrics,
@@ -373,6 +374,9 @@ describe("required cigarette sale calculations", () => {
       capitalDeployedCentavos: 21_000_000,
       capitalDeploymentPercent: 100,
     });
+  });
+  it("calculates the next box fund after profit distributions and posted capital withdrawals", () => {
+    expect(calculateNextBoxFund(21_000_000, 1_986_000, 0)).toBe(19_014_000); // ₱190,140
   });
 });
 
