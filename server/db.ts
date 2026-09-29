@@ -677,64 +677,17 @@ async function normalizeTransitionRecords(userId: number | null, canonicalPeriod
   await recordAudit(userId, "corrected", "inventory", id, "Corrected duplicate transition stock. Current inventory is 6 boxes / 300 units; original rows were retained.");
 }
 
+/** Legacy read-only compatibility helper. It no longer creates a 4-box plan or inventory adjustment. */
 async function ensureOngoingPeriodPlan(userId: number | null = null) {
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
   const [existing] = await db.select().from(businessPeriods).where(eq(businessPeriods.name, "Period 2  -  Ongoing 4-Box Cycle")).limit(1);
-  if (existing) {
-    await ensureScheduledFourBoxTransition(userId);
-    return existing;
-  }
-  const [gale] = await db.select().from(owners).where(eq(owners.name, "Gale")).limit(1);
-  const [nikki] = await db.select().from(owners).where(eq(owners.name, "Nikki")).limit(1);
-  if (!gale || !nikki) throw new Error("Owners are unavailable.");
-  const startDate = new Date("2026-09-29T00:00:00.000Z");
-  const [inserted] = await db.insert(businessPeriods).values({
-    name: "Period 2  -  Ongoing 4-Box Cycle",
-    status: "planned",
-    startDate,
-    totalStartingBoxes: 4,
-    totalStartingUnits: 200,
-    totalStartingCapitalCentavos: 14_000_000,
-    notes: "Starts Monday after the temporary 6-box period. Gale: 2 boxes. Nikki: 2 boxes.",
-    createdBy: userId,
-  });
-  const periodId = Number((inserted as any)[0]?.insertId ?? (inserted as any).insertId);
-  await db.insert(periodOwnerTranches).values([
-    { periodId, ownerId: gale.id, label: "Gale  -  ongoing 2-box cycle", trancheType: "ongoing", startingBoxes: 2, startingUnits: 100, startingCapitalCentavos: 7_000_000 },
-    { periodId, ownerId: nikki.id, label: "Nikki  -  ongoing 2-box cycle", trancheType: "ongoing", startingBoxes: 2, startingUnits: 100, startingCapitalCentavos: 7_000_000 },
-  ]);
-  await ensureScheduledFourBoxTransition(userId);
-  await recordAudit(userId, "planned", "business_period", periodId, "Planned Monday transition from 6 boxes to an ongoing 4-box cycle: Gale 2 boxes and Nikki 2 boxes.");
-  return { id: periodId, name: "Period 2  -  Ongoing 4-Box Cycle", status: "planned" as const };
-}
-
-async function ensureScheduledFourBoxTransition(userId: number | null) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is unavailable.");
-  const [existing] = await db.select().from(inventoryTransactions).where(eq(inventoryTransactions.description, "Monday transition - reduce inventory to 4 boxes")).limit(1);
-  if (existing) return;
-  const [product] = await db.select().from(products).where(eq(products.active, true)).orderBy(asc(products.id)).limit(1);
-  if (!product) throw new Error("Active product is unavailable while planning the 4-box transition.");
-  const transitionDate = new Date("2026-09-29T12:00:00.000Z");
-  const inserted = await db.insert(inventoryTransactions).values({
-    transactionDate: transitionDate,
-    productId: product.id,
-    transactionType: "adjustment",
-    unitsDelta: -100,
-    costPerUnitCentavos: product.costPerUnitCentavos,
-    description: "Monday transition - reduce inventory to 4 boxes",
-    notes: "Scheduled after the temporary 6-box period. Remaining inventory: Gale 2 boxes and Nikki 2 boxes.",
-    createdBy: userId,
-  });
-  const id = Number((inserted as any)[0]?.insertId ?? (inserted as any).insertId);
-  await db.update(inventoryTransactions).set({ recordCode: makeRecordCode("inventory", transitionDate, id), updatedBy: userId }).where(eq(inventoryTransactions.id, id));
+  return existing ?? null;
 }
 
 export async function getSetupData(userId: number) {
   await ensureBusinessSetup(userId);
   await ensureTransitionPeriod(userId);
-  await ensureOngoingPeriodPlan(userId);
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
   const [settingsRows, ownerRows, operatorRows, productRows, ruleRows, periodRows, trancheRows, returnRows] = await Promise.all([
@@ -930,7 +883,6 @@ export async function getDashboardRangeData(userId: number, startDateValue: stri
 export async function getDashboardData(userId: number) {
   await ensureBusinessSetup(userId);
   await ensureTransitionPeriod(userId);
-  await ensureOngoingPeriodPlan(userId);
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
   const [settingsRows, salesRows, inventoryRows, expenseRows, ownerRows, capitalRows, allocationRows, profitLedgerRows, productRows, closingRows, periodRows, weeklyTargetRows] = await Promise.all([
@@ -1004,11 +956,10 @@ export async function getDashboardData(userId: number) {
       economicInterestCentavos: contributions - withdrawals + allocatedProfit - distributions,
     };
   });
+  const totalInvestorCapitalCentavos = sum(ownerSummaries.map(owner => owner.currentCapitalCentavos));
   const salesVelocity = recent30.unitsSold / 30;
   const estimatedDaysUntilStockout = salesVelocity > 0 ? inventoryUnits / salesVelocity : null;
   const insights: Array<{ tone: "good" | "watch" | "neutral"; text: string }> = [];
-  const plannedFourBoxCycle = periodRows.find(period => period.status === "planned" && period.totalStartingBoxes === 4);
-  if (plannedFourBoxCycle) insights.push({ tone: "neutral", text: `Current stock is ${inventoryUnits} units / ${inventoryUnits / settings.unitsPerBox} boxes. The 4-box cycle begins on ${plannedFourBoxCycle.startDate.toLocaleDateString("en-PH", { month: "short", day: "numeric" })}: Gale 2 boxes and Nikki 2 boxes.` });
   if (inventoryUnits <= settings.minimumInventoryUnits) insights.push({ tone: "watch", text: `RESTOCK NEEDED  -  ${inventoryUnits} units remain, at or below your ${settings.minimumInventoryUnits}-unit minimum.` });
   if (estimatedDaysUntilStockout !== null) insights.push({ tone: estimatedDaysUntilStockout < 7 ? "watch" : "neutral", text: `At the recent pace of ${salesVelocity.toFixed(1)} units/day, inventory may last about ${estimatedDaysUntilStockout.toFixed(1)} days.` });
   if (monthMetrics.cashVarianceCentavos !== 0) insights.push({ tone: "watch", text: `This month’s cash collected differs from expected sales by ${monthMetrics.cashVarianceCentavos < 0 ? "−" : "+"}₱${(Math.abs(monthMetrics.cashVarianceCentavos) / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })}. Review the cash variance note.` });
@@ -1020,6 +971,7 @@ export async function getDashboardData(userId: number) {
     inventoryUnits,
     inventoryBoxes: inventoryUnits / settings.unitsPerBox,
     inventoryValueCentavos,
+    totalInvestorCapitalCentavos,
     retainedCash,
     outstandingReceivablesCentavos,
     salesVelocity,
@@ -1059,7 +1011,6 @@ export async function getDashboardData(userId: number) {
 export async function getTransitionReport(userId: number) {
   await ensureBusinessSetup(userId);
   const period = await ensureTransitionPeriod(userId);
-  await ensureOngoingPeriodPlan(userId);
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
   const [periodRows, trancheRows, ownerRows, saleRows, capitalRows, returnRows, inventoryRows] = await Promise.all([
