@@ -70,6 +70,30 @@ describe("capital-based daily profit allocation", () => {
     expect(afterReplacement.replacementPurchasesCentavos).toBe(3_500_000);
   });
 
+  it("does not treat opening or transition setup stock as replacement inventory", () => {
+    const result = calculateNextBoxFundBalance({
+      sales: [{ cogsCentavos: 7_000_000, isVoided: false }],
+      inventory: [
+        {
+          transactionType: "purchase",
+          fundingSource: "retained_cash",
+          description: "Transition setup — additional 2 boxes",
+          unitsDelta: 100,
+          costPerUnitCentavos: 70_000,
+        },
+        {
+          transactionType: "purchase",
+          fundingSource: "retained_cash",
+          description: "Purchased 2 boxes",
+          unitsDelta: 100,
+          costPerUnitCentavos: 70_000,
+        },
+      ],
+    });
+    expect(result.replacementPurchasesCentavos).toBe(7_000_000);
+    expect(result.availableCentavos).toBe(0);
+  });
+
   it("records each posted capital change that changes the future split", () => {
     const timeline = buildCapitalHistoryTimeline(
       [

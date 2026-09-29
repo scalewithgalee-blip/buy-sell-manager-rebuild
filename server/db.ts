@@ -546,6 +546,7 @@ export function calculateNextBoxFundBalance(input: {
   inventory: Array<{
     transactionType: string;
     fundingSource?: string | null;
+    description?: string | null;
     unitsDelta: number;
     costPerUnitCentavos: number;
   }>;
@@ -560,7 +561,8 @@ export function calculateNextBoxFundBalance(input: {
       .filter(
         item =>
           item.transactionType === "purchase" &&
-          item.fundingSource === "retained_cash"
+          item.fundingSource === "retained_cash" &&
+          !/opening|transition|setup/i.test(item.description ?? "")
       )
       .map(item => Math.max(0, item.unitsDelta) * item.costPerUnitCentavos)
   );
