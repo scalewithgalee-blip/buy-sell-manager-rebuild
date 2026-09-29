@@ -14,4 +14,6 @@
 - [x] Run 32 unit tests, TypeScript checks, the production build, and live UI verification.
 - [x] Prepare the verified final WebDev checkpoint.
 - [x] Add Business Position breakdown: owner capital, profit distributions paid, posted capital withdrawals, and calculated Next Box Fund.
-- [x] Verify the live UI shows ₱210,000 − ₱19,860 − ₱0 = ₱190,140.
+- [x] Correct Next Box Fund to owner capital minus posted capital withdrawals; profit distributions do not reduce it.
+- [x] Promote Next Box Fund to the primary KPI and remove the old operating-cash breakdown from the main dashboard.
+- [x] Verify the live UI shows ₱210,000 − ₱0 = ₱210,000, with −₱19,860 distributions displayed separately.

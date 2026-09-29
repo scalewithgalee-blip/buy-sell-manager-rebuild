@@ -376,7 +376,7 @@ describe("required cigarette sale calculations", () => {
     });
   });
   it("calculates the next box fund after profit distributions and posted capital withdrawals", () => {
-    expect(calculateNextBoxFund(21_000_000, 1_986_000, 0)).toBe(19_014_000); // ₱190,140
+    expect(calculateNextBoxFund(21_000_000, 1_986_000, 0)).toBe(21_000_000); // ₱210,000; distributions do not reduce capital
   });
 });
 

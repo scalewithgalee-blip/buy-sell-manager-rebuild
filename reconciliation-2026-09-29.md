@@ -66,7 +66,7 @@ The code paths that automatically created a planned four-box period and the −1
 
 Per the final interface direction, the original dashboard KPI cards were preserved. Only **“Retained Cash Available”** was renamed to **“Operating Cash,”** and only its expanded cash-flow breakdown was revised to distinguish operating cash from owner capital and inventory value.
 
-The expanded dashboard now leads with a **Business Position** section: **₱210,000 Owner Capital − ₱19,860 Profit Distributions Paid − ₱0 Posted Capital Withdrawals = ₱190,140 Next Box Fund**. The operating-cash breakdown follows underneath and remains separate from this next-box calculation.
+The expanded dashboard now leads with a **Business Position** section: **₱210,000 Owner Capital − ₱0 Posted Capital Withdrawals = ₱210,000 Next Box Fund**. The **₱19,860 Profit Distributions Paid** is displayed separately and does not reduce owner capital or the Next Box Fund. The old operating-cash breakdown was removed from the main dashboard to keep the position clear.
 
 ## Verification
 

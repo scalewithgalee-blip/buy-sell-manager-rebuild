@@ -752,9 +752,7 @@ export default function Home() {
     0
   );
   const nextBoxFundCentavos =
-    ownerCapitalCentavos -
-    Number(operatingCash.profitDistributionsCentavos ?? 0) -
-    postedCapitalWithdrawalsCentavos;
+    ownerCapitalCentavos - postedCapitalWithdrawalsCentavos;
   const setup = setupQuery.data;
   const resilience = resilienceQuery.data as any;
   const restorePreview = restorePreviewQuery.data as any;
@@ -1337,15 +1335,15 @@ export default function Home() {
           icon={Package}
         />
         <MetricCard
-          label="Operating cash"
-          value={peso(operatingCash.availableCentavos)}
+          label="Next Box Fund"
+          value={peso(nextBoxFundCentavos)}
           hint={
             showRetainedCashBreakdown
-              ? "Click to hide cash-flow breakdown"
-              : "Click to view cash-flow breakdown"
+              ? "Click to hide business position"
+              : "Click to view business position"
           }
-          info="Sales cash collected less recorded cash-funded inventory purchases, expenses, profit distributions, and posted capital withdrawals. Owner capital is tracked separately."
-          tone={operatingCash.availableCentavos >= 0 ? "teal" : "coral"}
+          info="Owner capital available for the next inventory cycle after posted capital withdrawals. Profit distributions are payouts of earned profit and do not reduce owner capital."
+          tone="teal"
           icon={Wallet}
           onClick={() => setShowRetainedCashBreakdown(current => !current)}
         />
@@ -1387,9 +1385,9 @@ export default function Home() {
                 Owner capital and next box fund
               </h3>
               <p className="mt-1 max-w-2xl text-sm leading-5 text-[#8d90a2]">
-                Owner capital less profit distributions and posted capital
-                withdrawals. This calculation does not change any ledger
-                records.
+                Owner capital available for the next inventory cycle after
+                posted capital withdrawals. Profit distributions are payouts of
+                earned profit and do not reduce owner capital.
               </p>
             </div>
             <button
@@ -1432,70 +1430,7 @@ export default function Home() {
                 {peso(nextBoxFundCentavos)}
               </p>
               <p className="mt-1 text-[11px] text-[#8d90a2]">
-                Owner capital − distributions − withdrawals
-              </p>
-            </div>
-          </div>
-          <div className="border-b border-[#eeeef4] px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
-              Operating cash breakdown
-            </p>
-            <p className="mt-1 text-sm text-[#8d90a2]">
-              Sales cash less recorded operating outflows. Owner capital is
-              shown above and is not included here.
-            </p>
-          </div>
-          <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-lg bg-[#f0efff] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
-                Sales cash collected
-              </p>
-              <p className="mt-1 text-lg font-semibold text-[#5b4de1]">
-                +{peso(operatingCash.salesCashCentavos)}
-              </p>
-            </div>
-            <div className="rounded-lg bg-[#fff1ef] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
-                Operating expenses
-              </p>
-              <p className="mt-1 text-lg font-semibold text-[#9d3f35]">
-                −{peso(operatingCash.operatingExpensesCentavos)}
-              </p>
-            </div>
-            <div className="rounded-lg bg-[#fff1ef] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
-                Inventory purchases paid from operating cash
-              </p>
-              <p className="mt-1 text-lg font-semibold text-[#9d3f35]">
-                −{peso(operatingCash.retainedCashPurchasesCentavos)}
-              </p>
-            </div>
-            <div className="rounded-lg bg-[#fff1ef] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
-                Profit distributions paid
-              </p>
-              <p className="mt-1 text-lg font-semibold text-[#9d3f35]">
-                −{peso(operatingCash.profitDistributionsCentavos)}
-              </p>
-            </div>
-            <div className="rounded-lg bg-[#fff1ef] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
-                Posted capital withdrawals
-              </p>
-              <p className="mt-1 text-lg font-semibold text-[#9d3f35]">
-                −{peso(operatingCash.capitalWithdrawalsCentavos)}
-              </p>
-            </div>
-            <div
-              className={`rounded-lg p-3 ${operatingCash.availableCentavos >= 0 ? "bg-[#f0efff]" : "bg-[#fff1ef]"}`}
-            >
-              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
-                Operating cash
-              </p>
-              <p
-                className={`mt-1 text-lg font-semibold ${operatingCash.availableCentavos >= 0 ? "text-[#5b4de1]" : "text-[#9d3f35]"}`}
-              >
-                {peso(operatingCash.availableCentavos)}
+                Owner capital − posted capital withdrawals
               </p>
             </div>
           </div>

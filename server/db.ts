@@ -466,11 +466,8 @@ export function calculateNextBoxFund(
   profitDistributionsCentavos: number,
   postedCapitalWithdrawalsCentavos: number
 ) {
-  return (
-    ownerCapitalCentavos -
-    profitDistributionsCentavos -
-    postedCapitalWithdrawalsCentavos
-  );
+  void profitDistributionsCentavos;
+  return ownerCapitalCentavos - postedCapitalWithdrawalsCentavos;
 }
 
 export function calculateInventoryPurchase(
