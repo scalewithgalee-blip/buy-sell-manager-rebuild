@@ -754,9 +754,9 @@ export default function Home() {
     0
   );
   const nextBoxFundCentavos = Number(
-    dashboard.nextBoxFundTodayCentavos ??
-      dashboard.nextBoxFundCentavos ??
+    dashboard.nextBoxFundCentavos ??
       dashboard.nextBoxFund?.availableCentavos ??
+      dashboard.nextBoxFundTodayCentavos ??
       0
   );
   const setup = setupQuery.data;
@@ -2032,9 +2032,9 @@ export default function Home() {
           icon={Banknote}
         />
         <MetricCard
-          label="Today's Next Box Fund"
+          label="Next Box Fund"
           value={peso(nextBoxFundCentavos)}
-          hint="Today’s COGS recovered from today’s sales"
+          hint="Carries forward from recovered COGS less replacement purchases"
           tone="teal"
           icon={Wallet}
         />
@@ -3043,13 +3043,14 @@ export default function Home() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <section className="panel p-5">
           <p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#6d5dfc]">
-            Today's replacement cycle
+            Next Box Fund
           </p>
           <p className="mt-3 text-2xl font-semibold text-[#17182b]">
             {peso(nextBoxFundCentavos)}
           </p>
           <p className="mt-2 text-sm text-[#8d90a2]">
-            Today’s COGS recovered from today’s sales.
+            Carries forward automatically: recovered COGS less replacement
+            purchases.
           </p>
         </section>
         {(["week", "month", "quarter", "year"] as const).map(key => (

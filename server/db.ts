@@ -641,6 +641,74 @@ export function calculateTodayNextBoxFundBalance(input: {
     ),
   };
 }
+
+/**
+ * Current replacement-cycle balance. A physical inventory reconciliation establishes
+ * the opening stock for the active cycle; only sales and replacement purchases after
+ * that baseline affect the carry-forward fund.
+ */
+export function calculateCurrentNextBoxFundBalance(input: {
+  sales: Array<{
+    saleDate: Date;
+    createdAt?: Date | string | null;
+    cogsCentavos: number;
+    isVoided: boolean;
+  }>;
+  inventory: Array<{
+    transactionDate: Date;
+    createdAt?: Date | string | null;
+    transactionType: string;
+    fundingSource?: string | null;
+    description?: string | null;
+    unitsDelta: number;
+    costPerUnitCentavos: number;
+  }>;
+}) {
+  const eventTime = (
+    value: Date | string | null | undefined,
+    fallback: Date
+  ) =>
+    value instanceof Date
+      ? value.getTime()
+      : value
+        ? Date.parse(String(value))
+        : fallback.getTime();
+  const reconciliationTimes = input.inventory
+    .filter(
+      item =>
+        item.transactionType === "adjustment" &&
+        /physical inventory reconciliation/i.test(item.description ?? "")
+    )
+    .map(item => eventTime(item.createdAt, item.transactionDate))
+    .filter(Number.isFinite);
+  const cycleStartTime = reconciliationTimes.length
+    ? Math.max(...reconciliationTimes)
+    : -Infinity;
+  return calculateNextBoxFundBalance({
+    sales: input.sales
+      .filter(sale => eventTime(sale.createdAt, sale.saleDate) > cycleStartTime)
+      .map(({ cogsCentavos, isVoided }) => ({ cogsCentavos, isVoided })),
+    inventory: input.inventory
+      .filter(
+        item => eventTime(item.createdAt, item.transactionDate) > cycleStartTime
+      )
+      .map(
+        ({
+          transactionType,
+          fundingSource,
+          description,
+          unitsDelta,
+          costPerUnitCentavos,
+        }) => ({
+          transactionType,
+          fundingSource,
+          description,
+          unitsDelta,
+          costPerUnitCentavos,
+        })
+      ),
+  });
+}
 /** Allocates gross profit only; capital/COGS is never included in owner profit. */
 export function calculateProfitSplit(
   grossProfitCentavos: number,
@@ -1821,7 +1889,7 @@ export async function getDashboardData(userId: number) {
     capital: capitalRows,
     profitLedger: profitLedgerRows,
   });
-  const nextBoxFund = calculateNextBoxFundBalance({
+  const nextBoxFund = calculateCurrentNextBoxFundBalance({
     sales: salesRows,
     inventory: currentInventoryRows,
   });
@@ -2033,7 +2101,8 @@ export async function getDashboardData(userId: number) {
     operatingCash: retainedCash,
     nextBoxFund,
     nextBoxFundCentavos: nextBoxFund.availableCentavos,
-    nextBoxFundTodayCentavos: nextBoxFundToday.availableCentavos,
+    // The primary fund carries forward across days; retain the daily diagnostic separately.
+    nextBoxFundTodayCentavos: nextBoxFund.availableCentavos,
     nextBoxFundToday,
     businessPosition,
     totalOwnerCapitalCentavos,

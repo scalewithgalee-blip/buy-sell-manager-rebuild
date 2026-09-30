@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateAutoSaleTotals,
+  calculateCurrentNextBoxFundBalance,
   calculateInventoryPurchase,
   calculateNextBoxFundBalance,
   calculateTodayNextBoxFundBalance,
@@ -100,6 +101,71 @@ describe("inventory funding flow: sale to replacement purchase", () => {
           fundingSource: "retained_cash",
           description: "Purchased 2 boxes",
           unitsDelta: 100,
+          costPerUnitCentavos: 70_000,
+        },
+        {
+          transactionDate: new Date("2026-09-29T12:00:00.000Z"),
+          createdAt: "2026-09-29 09:51:51",
+          transactionType: "purchase",
+          fundingSource: "retained_cash",
+          description: "Purchased 1 box",
+          unitsDelta: 50,
+          costPerUnitCentavos: 70_000,
+        },
+      ],
+    });
+    expect(result.cogsRecoveredCentavos).toBe(5_040_000);
+    expect(result.replacementPurchasesCentavos).toBe(3_500_000);
+    expect(result.availableCentavos).toBe(1_540_000);
+  });
+
+  it("carries the remaining replacement balance across days", () => {
+    const result = calculateNextBoxFundBalance({
+      sales: [
+        { cogsCentavos: 5_040_000, isVoided: false },
+        { cogsCentavos: 2_100_000, isVoided: false },
+      ],
+      inventory: [
+        {
+          transactionType: "purchase",
+          fundingSource: "retained_cash",
+          description: "Purchased 1 box — Next Box Fund replacement",
+          unitsDelta: 50,
+          costPerUnitCentavos: 70_000,
+        },
+      ],
+    });
+    expect(result.availableCentavos).toBe(3_640_000);
+  });
+
+  it("starts the carry-forward balance after the latest physical reconciliation", () => {
+    const result = calculateCurrentNextBoxFundBalance({
+      sales: [
+        {
+          saleDate: new Date("2026-09-29T12:00:00.000Z"),
+          createdAt: "2026-09-29 09:31:55",
+          cogsCentavos: 5_040_000,
+          isVoided: false,
+        },
+      ],
+      inventory: [
+        {
+          transactionDate: new Date("2026-09-29T12:00:00.000Z"),
+          createdAt: "2026-09-29 02:17:36",
+          transactionType: "purchase",
+          fundingSource: "retained_cash",
+          description: "Purchased 2 boxes",
+          unitsDelta: 100,
+          costPerUnitCentavos: 70_000,
+        },
+        {
+          transactionDate: new Date("2026-09-29T12:00:00.000Z"),
+          createdAt: "2026-09-29 03:27:25",
+          transactionType: "adjustment",
+          fundingSource: "other",
+          description:
+            "Physical inventory reconciliation — 6 boxes / 300 reams",
+          unitsDelta: -125,
           costPerUnitCentavos: 70_000,
         },
         {
