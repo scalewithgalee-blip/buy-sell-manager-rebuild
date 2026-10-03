@@ -753,6 +753,9 @@ export default function Home() {
       total + Number(owner.capitalWithdrawnCentavos ?? 0),
     0
   );
+  const profitDistributionsPaidCentavos = Number(
+    dashboard.totalProfitDistributedCentavos ?? 0
+  );
   const nextBoxFundCentavos = Number(
     dashboard.nextBoxFundCentavos ??
       dashboard.nextBoxFund?.availableCentavos ??
@@ -1349,7 +1352,7 @@ export default function Home() {
               ? "Click to hide business position"
               : "Click to view business position"
           }
-          info="Today’s Next Box Fund is the COGS recovered from today’s valid sales. The cumulative replacement balance remains separate for purchase controls."
+          info="Next Box Fund is the actual business cash currently available for additional inventory purchases."
           tone="teal"
           icon={Wallet}
           onClick={() => setShowRetainedCashBreakdown(current => !current)}
@@ -1389,12 +1392,12 @@ export default function Home() {
                 Business position
               </p>
               <h3 className="mt-1 text-lg font-semibold text-[#17182b]">
-                Owner capital and next box fund
+                Business position
               </h3>
               <p className="mt-1 max-w-2xl text-sm leading-5 text-[#8d90a2]">
-                Owner capital available for the next inventory cycle after
-                posted capital withdrawals. Profit distributions are payouts of
-                earned profit and do not reduce owner capital.
+                Owner capital, physical inventory, business cash, and profit are
+                separate balances. Cash / Next Box Fund is the amount currently
+                available to purchase additional inventory.
               </p>
             </div>
             <button
@@ -1404,7 +1407,7 @@ export default function Home() {
               Hide details
             </button>
           </div>
-          <div className="grid gap-3 border-b border-[#eeeef4] p-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 border-b border-[#eeeef4] p-5 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-lg bg-[#f0efff] p-3">
               <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
                 Owner capital
@@ -1418,7 +1421,7 @@ export default function Home() {
                 Profit distributions paid
               </p>
               <p className="mt-1 text-lg font-semibold text-[#9d3f35]">
-                −{peso(operatingCash.profitDistributionsCentavos)}
+                −{peso(profitDistributionsPaidCentavos)}
               </p>
             </div>
             <div className="rounded-lg bg-[#fff1ef] p-3">
@@ -1429,15 +1432,35 @@ export default function Home() {
                 −{peso(postedCapitalWithdrawalsCentavos)}
               </p>
             </div>
+            <div className="rounded-lg bg-[#f7f7fb] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
+                Physical inventory
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#17182b]">
+                {number(dashboard.inventoryUnits)} units
+              </p>
+            </div>
+            <div className="rounded-lg bg-[#f7f7fb] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
+                Inventory value at cost
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#17182b]">
+                {peso(dashboard.inventoryValueCentavos)}
+              </p>
+              <p className="mt-1 text-[11px] text-[#8d90a2]">
+                {number(dashboard.inventoryUnits)} ×{" "}
+                {peso(dashboard.settings.defaultCostPerUnitCentavos)} per unit
+              </p>
+            </div>
             <div className="rounded-lg bg-[#f0efff] p-3">
               <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
-                Next box fund
+                Cash / Next Box Fund
               </p>
               <p className="mt-1 text-lg font-semibold text-[#5b4de1]">
                 {peso(nextBoxFundCentavos)}
               </p>
               <p className="mt-1 text-[11px] text-[#8d90a2]">
-                Owner capital − posted capital withdrawals
+                Available for additional inventory purchases
               </p>
             </div>
           </div>
@@ -2034,7 +2057,7 @@ export default function Home() {
         <MetricCard
           label="Next Box Fund"
           value={peso(nextBoxFundCentavos)}
-          hint="Carries forward from recovered COGS less replacement purchases"
+          hint="Actual business cash available for additional inventory purchases"
           tone="teal"
           icon={Wallet}
         />
@@ -2088,8 +2111,8 @@ export default function Home() {
           </h3>
           <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
             Record new stock when you purchase more boxes. Next Box Fund
-            purchases consume recovered COGS without changing owner capital or
-            profit; new owner capital is recorded as a separate capital
+            purchases consume Next Box Fund cash without changing owner capital
+            or profit; new owner capital is recorded as a separate capital
             contribution.
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -2192,7 +2215,7 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-3">
-            <Label info="Next Box Fund is recovered COGS from inventory already sold. New owner capital is a separate source that changes capital and future profit shares.">
+            <Label info="Next Box Fund is actual business cash available for inventory purchases. New owner capital is a separate source that changes capital and future profit shares.">
               Funding source
             </Label>
             <select
@@ -2208,9 +2231,7 @@ export default function Home() {
               }
               className="field mt-1"
             >
-              <option value="retained_cash">
-                Next Box Fund from recovered COGS
-              </option>
+              <option value="retained_cash">Next Box Fund</option>
               <option value="new_capital">
                 New Owner Capital (linked contribution)
               </option>
@@ -2218,8 +2239,8 @@ export default function Home() {
             </select>
             <p className="mt-1 text-xs leading-5 text-[#8d90a2]">
               Choose Next Box Fund when replacing inventory sold previously.
-              This adds inventory, consumes recovered COGS, and does not change
-              owner capital or profit.
+              This adds inventory, consumes Next Box Fund cash, and does not
+              change owner capital or profit.
             </p>
           </div>
           {inventoryPurchase.fundingSource === "new_capital" && (
@@ -3049,8 +3070,8 @@ export default function Home() {
             {peso(nextBoxFundCentavos)}
           </p>
           <p className="mt-2 text-sm text-[#8d90a2]">
-            Carries forward automatically: recovered COGS less replacement
-            purchases.
+            Actual business cash available for inventory purchases; it carries
+            forward after sales, purchases, expenses, and payouts.
           </p>
         </section>
         {(["week", "month", "quarter", "year"] as const).map(key => (

@@ -21,6 +21,7 @@ import {
   backupSettings,
   businessSettings,
   businessPeriods,
+  cashReconciliations,
   capitalTransactions,
   customers,
   dailyClosings,
@@ -114,6 +115,7 @@ const recordPrefix: Record<string, string> = {
   capital: "CAP",
   expense: "EXP",
   closing: "CLOSE",
+  cash: "CASH",
   backup: "BKP",
   integrity: "CHECK",
   period: "PERIOD",
@@ -708,6 +710,121 @@ export function calculateCurrentNextBoxFundBalance(input: {
         })
       ),
   });
+}
+
+/**
+ * Cash-based Next Box Fund ledger beginning at an explicit reconciliation.
+ * Owner capital is intentionally excluded: it is a separate balance. A
+ * retained-cash purchase decreases the fund; a sale adds collected cash;
+ * profit payouts, expenses, and posted capital withdrawals consume cash.
+ */
+export function calculateCashBasedNextBoxFund(input: {
+  openingCashCentavos: number;
+  baselineCreatedAt: Date;
+  sales: Array<{
+    saleDate: Date;
+    createdAt?: Date | string | null;
+    cashCollectedCentavos: number;
+    isVoided: boolean;
+  }>;
+  inventory: Array<{
+    transactionDate: Date;
+    createdAt?: Date | string | null;
+    transactionType: string;
+    fundingSource?: string | null;
+    unitsDelta: number;
+    costPerUnitCentavos: number;
+  }>;
+  expenses: Array<{
+    expenseDate: Date;
+    createdAt?: Date | string | null;
+    amountCentavos: number;
+  }>;
+  profitLedger: Array<{
+    entryDate: Date;
+    createdAt?: Date | string | null;
+    entryType: string;
+    amountCentavos: number;
+  }>;
+  capital: Array<{
+    transactionDate: Date;
+    createdAt?: Date | string | null;
+    transactionType: string;
+    status: string;
+    amountCentavos: number;
+  }>;
+}) {
+  const eventTime = (
+    value: Date | string | null | undefined,
+    fallback: Date
+  ) =>
+    value instanceof Date
+      ? value.getTime()
+      : value
+        ? Date.parse(String(value))
+        : fallback.getTime();
+  const baselineTime = input.baselineCreatedAt.getTime();
+  const afterBaseline = (
+    createdAt: Date | string | null | undefined,
+    fallback: Date
+  ) => eventTime(createdAt, fallback) > baselineTime;
+  const salesCashCentavos = sum(
+    input.sales
+      .filter(
+        sale => !sale.isVoided && afterBaseline(sale.createdAt, sale.saleDate)
+      )
+      .map(sale => Math.max(0, sale.cashCollectedCentavos))
+  );
+  const retainedCashPurchasesCentavos = sum(
+    input.inventory
+      .filter(
+        item =>
+          item.transactionType === "purchase" &&
+          item.fundingSource === "retained_cash" &&
+          afterBaseline(item.createdAt, item.transactionDate)
+      )
+      .map(item => Math.max(0, item.unitsDelta) * item.costPerUnitCentavos)
+  );
+  const operatingExpensesCentavos = sum(
+    input.expenses
+      .filter(expense => afterBaseline(expense.createdAt, expense.expenseDate))
+      .map(expense => Math.max(0, expense.amountCentavos))
+  );
+  const profitDistributionsCentavos = sum(
+    input.profitLedger
+      .filter(
+        entry =>
+          entry.entryType === "distributed" &&
+          afterBaseline(entry.createdAt, entry.entryDate)
+      )
+      .map(entry => Math.max(0, entry.amountCentavos))
+  );
+  const capitalWithdrawalsCentavos = sum(
+    input.capital
+      .filter(
+        entry =>
+          entry.status === "posted" &&
+          entry.transactionType === "capital_withdrawal" &&
+          afterBaseline(entry.createdAt, entry.transactionDate)
+      )
+      .map(entry => Math.max(0, entry.amountCentavos))
+  );
+  const availableCentavos =
+    input.openingCashCentavos +
+    salesCashCentavos -
+    retainedCashPurchasesCentavos -
+    operatingExpensesCentavos -
+    profitDistributionsCentavos -
+    capitalWithdrawalsCentavos;
+  return {
+    openingCashCentavos: input.openingCashCentavos,
+    salesCashCentavos,
+    retainedCashPurchasesCentavos,
+    operatingExpensesCentavos,
+    profitDistributionsCentavos,
+    capitalWithdrawalsCentavos,
+    availableCentavos,
+  };
 }
 /** Allocates gross profit only; capital/COGS is never included in owner profit. */
 export function calculateProfitSplit(
@@ -1814,6 +1931,7 @@ export async function getDashboardData(userId: number) {
   if (!db) throw new Error("Database is unavailable.");
   const [
     settingsRows,
+    cashReconciliationRows,
     salesRows,
     inventoryRows,
     expenseRows,
@@ -1827,6 +1945,14 @@ export async function getDashboardData(userId: number) {
     weeklyTargetRows,
   ] = await Promise.all([
     db.select().from(businessSettings).limit(1),
+    db
+      .select()
+      .from(cashReconciliations)
+      .orderBy(
+        desc(cashReconciliations.reconciliationDate),
+        desc(cashReconciliations.id)
+      )
+      .limit(1),
     db.select().from(sales).orderBy(desc(sales.saleDate)),
     db
       .select()
@@ -1889,10 +2015,21 @@ export async function getDashboardData(userId: number) {
     capital: capitalRows,
     profitLedger: profitLedgerRows,
   });
-  const nextBoxFund = calculateCurrentNextBoxFundBalance({
-    sales: salesRows,
-    inventory: currentInventoryRows,
-  });
+  const cashReconciliation = cashReconciliationRows[0];
+  const nextBoxFund = cashReconciliation
+    ? calculateCashBasedNextBoxFund({
+        openingCashCentavos: cashReconciliation.amountCentavos,
+        baselineCreatedAt: cashReconciliation.createdAt,
+        sales: salesRows,
+        inventory: currentInventoryRows,
+        expenses: expenseRows,
+        profitLedger: profitLedgerRows,
+        capital: capitalRows,
+      })
+    : calculateCurrentNextBoxFundBalance({
+        sales: salesRows,
+        inventory: currentInventoryRows,
+      });
   const todayMetrics = periodMetrics(
     salesRows,
     expenseRows,
@@ -2102,8 +2239,15 @@ export async function getDashboardData(userId: number) {
     nextBoxFund,
     nextBoxFundCentavos: nextBoxFund.availableCentavos,
     // The primary fund carries forward across days; retain the daily diagnostic separately.
-    nextBoxFundTodayCentavos: nextBoxFund.availableCentavos,
+    nextBoxFundTodayCentavos: nextBoxFundToday.availableCentavos,
     nextBoxFundToday,
+    cashReconciliation: cashReconciliation
+      ? {
+          recordCode: cashReconciliation.recordCode,
+          reconciliationDate: cashReconciliation.reconciliationDate,
+          amountCentavos: cashReconciliation.amountCentavos,
+        }
+      : null,
     businessPosition,
     totalOwnerCapitalCentavos,
     capitalDeployedCentavos: businessPosition.capitalDeployedCentavos,
@@ -2832,14 +2976,43 @@ export async function addInventoryPurchase(
     }
   }
   if (input.fundingSource === "retained_cash") {
-    const [saleRows, inventoryRows] = await Promise.all([
+    const [
+      saleRows,
+      inventoryRows,
+      expenseRows,
+      profitLedgerRows,
+      capitalRows,
+      cashReconciliationRows,
+    ] = await Promise.all([
       db.select().from(sales),
       db.select().from(inventoryTransactions),
+      db.select().from(expenses),
+      db.select().from(profitLedgerEntries),
+      db.select().from(capitalTransactions),
+      db
+        .select()
+        .from(cashReconciliations)
+        .orderBy(
+          desc(cashReconciliations.reconciliationDate),
+          desc(cashReconciliations.id)
+        )
+        .limit(1),
     ]);
-    const nextBoxFund = calculateNextBoxFundBalance({
-      sales: saleRows,
-      inventory: inventoryRows,
-    });
+    const cashReconciliation = cashReconciliationRows[0];
+    const nextBoxFund = cashReconciliation
+      ? calculateCashBasedNextBoxFund({
+          openingCashCentavos: cashReconciliation.amountCentavos,
+          baselineCreatedAt: cashReconciliation.createdAt,
+          sales: saleRows,
+          inventory: inventoryRows,
+          expenses: expenseRows,
+          profitLedger: profitLedgerRows,
+          capital: capitalRows,
+        })
+      : calculateCurrentNextBoxFundBalance({
+          sales: saleRows,
+          inventory: inventoryRows,
+        });
     if (purchase.totalCostCentavos > nextBoxFund.availableCentavos) {
       throw new Error(
         `Next Box Fund has only ₱${(nextBoxFund.availableCentavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2 })} available for this purchase.`
@@ -3377,6 +3550,7 @@ async function collectBusinessData() {
     operatorRows,
     productRows,
     settingRows,
+    cashReconciliationRows,
     targetRows,
     periodRows,
     trancheRows,
@@ -3400,6 +3574,7 @@ async function collectBusinessData() {
     db.select().from(operators),
     db.select().from(products),
     db.select().from(businessSettings),
+    db.select().from(cashReconciliations),
     db.select().from(weeklyTargetSnapshots),
     db.select().from(businessPeriods),
     db.select().from(periodOwnerTranches),
@@ -3424,6 +3599,7 @@ async function collectBusinessData() {
     operators: operatorRows,
     products: productRows,
     business_settings: settingRows,
+    cash_reconciliations: cashReconciliationRows,
     weekly_target_snapshots: targetRows,
     business_periods: periodRows,
     period_owner_tranches: trancheRows,
