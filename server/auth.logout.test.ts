@@ -201,7 +201,7 @@ describe("required cigarette sale calculations", () => {
     });
   });
 
-  it("preserves Monday-week targets and aggregates Cash variance by week", () => {
+  it("preserves Monday-week targets and aggregates profit earned by week", () => {
     const history = calculateWeeklyReportHistory({
       now: new Date("2026-09-23T12:00:00.000Z"),
       currentTargetUnits: 50,
@@ -220,19 +220,19 @@ describe("required cigarette sale calculations", () => {
         {
           saleDate: new Date("2026-09-21T12:00:00.000Z"),
           unitsSold: 40,
-          cashVarianceCentavos: -10_000,
+          grossProfitCentavos: 120_000,
           isVoided: false,
         },
         {
           saleDate: new Date("2026-09-14T12:00:00.000Z"),
           unitsSold: 25,
-          cashVarianceCentavos: 5_000,
+          grossProfitCentavos: 75_000,
           isVoided: false,
         },
         {
           saleDate: new Date("2026-09-15T12:00:00.000Z"),
           unitsSold: 99,
-          cashVarianceCentavos: 99_000,
+          grossProfitCentavos: 297_000,
           isVoided: true,
         },
       ],
@@ -247,7 +247,7 @@ describe("required cigarette sale calculations", () => {
       unitsRemaining: 10,
       completionPercent: 80,
       targetReached: false,
-      cashVarianceCentavos: -10_000,
+      profitEarnedCentavos: 120_000,
     });
     expect(history[1]).toMatchObject({
       weekStartDate: "2026-09-14",
@@ -257,7 +257,7 @@ describe("required cigarette sale calculations", () => {
       unitsSold: 25,
       unitsRemaining: 5,
       targetReached: false,
-      cashVarianceCentavos: 5_000,
+      profitEarnedCentavos: 75_000,
     });
     expect(history[1]?.completionPercent).toBeCloseTo(83.33, 2);
   });

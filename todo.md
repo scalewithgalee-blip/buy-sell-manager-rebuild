@@ -24,4 +24,4 @@
 - [x] Include cash reconciliation records in logical backups.
 - [x] Add regression tests for baseline cash, purchase/sale/payout carry-forward, and exclusion of pre-baseline history.
 - [x] Verify live dashboard response: 278 units, ₱19,460 inventory value, ₱36,000 Next Box Fund, ₱210,000 owner capital, and ₱19,860 profit distributed.
-- [ ] Publish the verified source and data correction to the production deployment.
+- [x] Publish the verified source and data correction to the production deployment; the live domain now returns the corrected ledger values.

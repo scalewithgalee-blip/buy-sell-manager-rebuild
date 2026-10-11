@@ -239,7 +239,7 @@ const demo = {
     unitsRemaining: number | null;
     completionPercent: number | null;
     targetReached: boolean | null;
-    cashVarianceCentavos: number;
+    profitEarnedCentavos: number;
   }>,
   alerts: [] as Array<{
     id: string;
@@ -3145,7 +3145,7 @@ export default function Home() {
                       <th className="px-5 py-3">Target</th>
                       <th className="px-5 py-3">Sold</th>
                       <th className="px-5 py-3">Result</th>
-                      <th className="px-5 py-3 text-right">Cash variance</th>
+                      <th className="px-5 py-3 text-right">Profit earned</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#eeeef4]">
@@ -3206,16 +3206,10 @@ export default function Home() {
                             </span>
                           )}
                         </td>
-                        <td
-                          className={`px-5 py-4 text-right font-semibold ${week.cashVarianceCentavos === 0 ? "text-[#5b4de1]" : "text-[#9d3f35]"}`}
-                        >
-                          {signedPeso(week.cashVarianceCentavos)}
+                        <td className="px-5 py-4 text-right font-semibold text-[#5b4de1]">
+                          {peso(week.profitEarnedCentavos)}
                           <p className="mt-1 text-[10px] font-medium uppercase tracking-wider text-[#8d90a2]">
-                            {week.cashVarianceCentavos === 0
-                              ? "Balanced"
-                              : week.cashVarianceCentavos < 0
-                                ? "Short"
-                                : "Over"}
+                            Gale + Nikki
                           </p>
                         </td>
                       </tr>
@@ -3246,13 +3240,11 @@ export default function Home() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p
-                          className={`font-semibold ${week.cashVarianceCentavos === 0 ? "text-[#5b4de1]" : "text-[#9d3f35]"}`}
-                        >
-                          {signedPeso(week.cashVarianceCentavos)}
+                        <p className="font-semibold text-[#5b4de1]">
+                          {peso(week.profitEarnedCentavos)}
                         </p>
                         <p className="text-[9px] font-bold uppercase tracking-wider text-[#8d90a2]">
-                          Cash variance
+                          Profit earned · Gale + Nikki
                         </p>
                       </div>
                     </div>

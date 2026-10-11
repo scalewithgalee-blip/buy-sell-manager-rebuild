@@ -1645,7 +1645,7 @@ async function saveCurrentWeeklyTargetSnapshot(
 
 type WeeklyReportSale = Pick<
   typeof sales.$inferSelect,
-  "saleDate" | "unitsSold" | "cashVarianceCentavos" | "isVoided"
+  "saleDate" | "unitsSold" | "grossProfitCentavos" | "isVoided"
 >;
 type WeeklyTargetSnapshot = Pick<
   typeof weeklyTargetSnapshots.$inferSelect,
@@ -1697,8 +1697,8 @@ export function calculateWeeklyReportHistory(input: {
         targetUnits === null ? null : Math.max(0, targetUnits - unitsSold),
       completionPercent,
       targetReached: targetUnits === null ? null : unitsSold >= targetUnits,
-      cashVarianceCentavos: sum(
-        weekSales.map(sale => sale.cashVarianceCentavos)
+      profitEarnedCentavos: sum(
+        weekSales.map(sale => sale.grossProfitCentavos)
       ),
     };
   }).filter(
@@ -1706,7 +1706,7 @@ export function calculateWeeklyReportHistory(input: {
       week.isCurrent ||
       week.targetUnits !== null ||
       week.unitsSold !== 0 ||
-      week.cashVarianceCentavos !== 0
+      week.profitEarnedCentavos !== 0
   );
 }
 
