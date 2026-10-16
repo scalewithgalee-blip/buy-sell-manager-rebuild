@@ -142,6 +142,8 @@ const demo = {
   inventoryValueCentavos: 21000000,
   totalOwnerCapitalCentavos: 21000000,
   nextBoxFundCentavos: 0,
+  capitalBalancedNextBoxFundCentavos: 0,
+  actualCashNextBoxFundCentavos: 0,
   capitalDeployedCentavos: 21000000,
   capitalDeploymentPercent: 100,
   totalProfitEarnedCentavos: 0,
@@ -757,9 +759,15 @@ export default function Home() {
     dashboard.totalProfitDistributedCentavos ?? 0
   );
   const nextBoxFundCentavos = Number(
-    dashboard.nextBoxFundCentavos ??
+    dashboard.capitalBalancedNextBoxFundCentavos ??
+      dashboard.nextBoxFundCentavos ??
       dashboard.nextBoxFund?.availableCentavos ??
       dashboard.nextBoxFundTodayCentavos ??
+      0
+  );
+  const actualCashNextBoxFundCentavos = Number(
+    dashboard.actualCashNextBoxFundCentavos ??
+      dashboard.nextBoxFund?.availableCentavos ??
       0
   );
   const setup = setupQuery.data;
@@ -1345,14 +1353,14 @@ export default function Home() {
           icon={Package}
         />
         <MetricCard
-          label="Today's Next Box Fund"
+          label="Next Box Fund"
           value={peso(nextBoxFundCentavos)}
           hint={
             showRetainedCashBreakdown
               ? "Click to hide business position"
               : "Click to view business position"
           }
-          info="Next Box Fund is the actual business cash currently available for additional inventory purchases."
+          info="Capital-balanced position: inventory value plus this Next Box Fund equals current posted owner capital. Actual cash available for purchases is tracked separately."
           tone="teal"
           icon={Wallet}
           onClick={() => setShowRetainedCashBreakdown(current => !current)}
@@ -1454,13 +1462,17 @@ export default function Home() {
             </div>
             <div className="rounded-lg bg-[#f0efff] p-3">
               <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
-                Cash / Next Box Fund
+                Capital-balanced Next Box Fund
               </p>
               <p className="mt-1 text-lg font-semibold text-[#5b4de1]">
                 {peso(nextBoxFundCentavos)}
               </p>
               <p className="mt-1 text-[11px] text-[#8d90a2]">
-                Available for additional inventory purchases
+                Inventory value plus this amount reconciles to owner capital.
+              </p>
+              <p className="mt-1 text-[11px] text-[#8d90a2]">
+                Actual cash available for purchases:{" "}
+                {peso(actualCashNextBoxFundCentavos)}
               </p>
             </div>
           </div>
@@ -3070,8 +3082,8 @@ export default function Home() {
             {peso(nextBoxFundCentavos)}
           </p>
           <p className="mt-2 text-sm text-[#8d90a2]">
-            Actual business cash available for inventory purchases; it carries
-            forward after sales, purchases, expenses, and payouts.
+            Capital-balanced position; inventory value plus this amount equals
+            current posted owner capital.
           </p>
         </section>
         {(["week", "month", "quarter", "year"] as const).map(key => (

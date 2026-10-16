@@ -463,6 +463,18 @@ export function calculateBusinessPosition(input: {
   };
 }
 
+/**
+ * Display balance requested by the business: inventory at cost plus the
+ * displayed Next Box Fund must reconcile to current posted owner capital.
+ * Actual cash remains available separately for purchase validation.
+ */
+export function calculateCapitalBalancedNextBoxFund(input: {
+  ownerCapitalCentavos: number;
+  inventoryValueCentavos: number;
+}) {
+  return input.ownerCapitalCentavos - input.inventoryValueCentavos;
+}
+
 export function calculateInventoryPurchase(
   boxes: number,
   unitsPerBox: number,
@@ -2184,6 +2196,11 @@ export async function getDashboardData(userId: number) {
     costPerUnitCentavos: settings.defaultCostPerUnitCentavos,
     ownerCapitalCentavos: totalOwnerCapitalCentavos,
   });
+  const capitalBalancedNextBoxFundCentavos =
+    calculateCapitalBalancedNextBoxFund({
+      ownerCapitalCentavos: totalOwnerCapitalCentavos,
+      inventoryValueCentavos,
+    });
   const totalProfitEarnedCentavos = sum(
     ownerSummaries.map(owner => owner.allocatedProfitCentavos)
   );
@@ -2237,7 +2254,9 @@ export async function getDashboardData(userId: number) {
     retainedCash,
     operatingCash: retainedCash,
     nextBoxFund,
-    nextBoxFundCentavos: nextBoxFund.availableCentavos,
+    nextBoxFundCentavos: capitalBalancedNextBoxFundCentavos,
+    capitalBalancedNextBoxFundCentavos,
+    actualCashNextBoxFundCentavos: nextBoxFund.availableCentavos,
     // The primary fund carries forward across days; retain the daily diagnostic separately.
     nextBoxFundTodayCentavos: nextBoxFundToday.availableCentavos,
     nextBoxFundToday,

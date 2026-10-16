@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { calculateCashBasedNextBoxFund } from "./db";
+import {
+  calculateCapitalBalancedNextBoxFund,
+  calculateCashBasedNextBoxFund,
+} from "./db";
 
 const baseline = new Date("2026-10-03T10:00:00.000Z");
 const after = (minutes: number) =>
@@ -14,6 +17,16 @@ const empty = {
 };
 
 describe("cash-based Next Box Fund", () => {
+  it("balances the displayed fund to current owner capital after inventory changes", () => {
+    const result = calculateCapitalBalancedNextBoxFund({
+      ownerCapitalCentavos: 21_000_000,
+      inventoryValueCentavos: 257 * 70_000,
+    });
+
+    expect(result).toBe(3_010_000);
+    expect(result + 257 * 70_000).toBe(21_000_000);
+  });
+
   it("starts from reconciled cash instead of owner capital", () => {
     const result = calculateCashBasedNextBoxFund({
       openingCashCentavos: 3_600_000,
