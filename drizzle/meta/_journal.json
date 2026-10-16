@@ -85,6 +85,13 @@
       "when": 1791040262047,
       "tag": "0011_famous_hellion",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1792161264211,
+      "tag": "0012_shallow_moon_knight",
+      "breakpoints": true
     }
   ]
 }

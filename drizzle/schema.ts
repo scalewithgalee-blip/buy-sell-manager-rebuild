@@ -526,5 +526,41 @@ export const integrityChecks = mysqlTable(
   ]
 );
 
+/**
+ * Materialized daily reporting facts. Detailed ledgers remain immutable and
+ * authoritative; this table is a query-optimized read model for dashboards,
+ * period reports, and charts.
+ */
+export const dailyReportSummaries = mysqlTable(
+  "dailyReportSummaries",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    summaryDate: timestamp("summaryDate").notNull().unique(),
+    unitsSold: int("unitsSold").default(0).notNull(),
+    revenueCentavos: int("revenueCentavos").default(0).notNull(),
+    cogsCentavos: int("cogsCentavos").default(0).notNull(),
+    grossProfitCentavos: int("grossProfitCentavos").default(0).notNull(),
+    cashCollectedCentavos: int("cashCollectedCentavos").default(0).notNull(),
+    cashVarianceCentavos: int("cashVarianceCentavos").default(0).notNull(),
+    expensesCentavos: int("expensesCentavos").default(0).notNull(),
+    inventoryUnitsDelta: int("inventoryUnitsDelta").default(0).notNull(),
+    retainedCashPurchasesCentavos: int("retainedCashPurchasesCentavos")
+      .default(0)
+      .notNull(),
+    profitDistributedCentavos: int("profitDistributedCentavos")
+      .default(0)
+      .notNull(),
+    capitalContributionsCentavos: int("capitalContributionsCentavos")
+      .default(0)
+      .notNull(),
+    capitalWithdrawalsCentavos: int("capitalWithdrawalsCentavos")
+      .default(0)
+      .notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("daily_reports_date_idx").on(table.summaryDate)]
+);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

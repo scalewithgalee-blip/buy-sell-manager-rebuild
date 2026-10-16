@@ -25,3 +25,15 @@
 - [x] Add regression tests for baseline cash, purchase/sale/payout carry-forward, and exclusion of pre-baseline history.
 - [x] Verify live dashboard response: 278 units, ₱19,460 inventory value, ₱36,000 Next Box Fund, ₱210,000 owner capital, and ₱19,860 profit distributed.
 - [x] Publish the verified source and data correction to the production deployment; the live domain now returns the corrected ledger values.
+
+## Reporting/read-model scaling — October 16, 2026
+
+- [x] Add the `dailyReportSummaries` persisted daily reporting table and migration.
+- [x] Materialize daily sales, expense, inventory, profit, capital, and cash facts from authoritative ledgers.
+- [x] Backfill the read model on first use without rewriting authoritative history.
+- [x] Move dashboard period KPIs, weekly/monthly sales history, weekly report history, and capital-position history to summary reads.
+- [x] Bound dashboard summary reads to the reporting window instead of loading every summary row.
+- [x] Refresh summaries after sale, expense, inventory purchase, capital transaction, profit distribution, customer payment, and sale-void mutations.
+- [x] Refresh both original and reversal dates when a sale is voided.
+- [x] Preserve authoritative-ledger fallback for current inventory and cash-sensitive calculations.
+- [x] Verify 46 tests pass, TypeScript validation passes, and the production build succeeds.

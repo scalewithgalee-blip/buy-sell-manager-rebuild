@@ -24,6 +24,7 @@ import {
   cashReconciliations,
   capitalTransactions,
   customers,
+  dailyReportSummaries,
   dailyClosings,
   expenses,
   guaranteedReturns,
@@ -95,6 +96,307 @@ export async function getUserByOpenId(openId: string) {
     .where(eq(users.openId, openId))
     .limit(1);
   return result[0];
+}
+
+type DailyReportSummaryInput = typeof dailyReportSummaries.$inferInsert;
+
+async function refreshDailyReportSummary(userId: number | null, date: Date) {
+  void userId;
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const start = dayStart(date);
+  const end = nextDay(start);
+  const [saleRows, expenseRows, inventoryRows, profitRows, capitalRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(sales)
+        .where(and(gte(sales.saleDate, start), lt(sales.saleDate, end))),
+      db
+        .select()
+        .from(expenses)
+        .where(
+          and(gte(expenses.expenseDate, start), lt(expenses.expenseDate, end))
+        ),
+      db
+        .select()
+        .from(inventoryTransactions)
+        .where(
+          and(
+            gte(inventoryTransactions.transactionDate, start),
+            lt(inventoryTransactions.transactionDate, end)
+          )
+        ),
+      db
+        .select()
+        .from(profitLedgerEntries)
+        .where(
+          and(
+            gte(profitLedgerEntries.entryDate, start),
+            lt(profitLedgerEntries.entryDate, end)
+          )
+        ),
+      db
+        .select()
+        .from(capitalTransactions)
+        .where(
+          and(
+            gte(capitalTransactions.transactionDate, start),
+            lt(capitalTransactions.transactionDate, end)
+          )
+        ),
+    ]);
+  const activeSales = saleRows.filter(row => !row.isVoided);
+  const values: DailyReportSummaryInput = {
+    summaryDate: start,
+    unitsSold: sum(activeSales.map(row => row.unitsSold)),
+    revenueCentavos: sum(activeSales.map(row => row.expectedRevenueCentavos)),
+    cogsCentavos: sum(activeSales.map(row => row.cogsCentavos)),
+    grossProfitCentavos: sum(activeSales.map(row => row.grossProfitCentavos)),
+    cashCollectedCentavos: sum(
+      activeSales.map(row => row.cashCollectedCentavos)
+    ),
+    cashVarianceCentavos: sum(activeSales.map(row => row.cashVarianceCentavos)),
+    expensesCentavos: sum(expenseRows.map(row => row.amountCentavos)),
+    inventoryUnitsDelta: sum(inventoryRows.map(row => row.unitsDelta)),
+    retainedCashPurchasesCentavos: sum(
+      inventoryRows
+        .filter(
+          row =>
+            row.transactionType === "purchase" &&
+            row.fundingSource === "retained_cash" &&
+            row.description?.startsWith("Purchased ")
+        )
+        .map(row => Math.max(0, row.unitsDelta) * row.costPerUnitCentavos)
+    ),
+    profitDistributedCentavos: sum(
+      profitRows
+        .filter(row => row.entryType === "distributed")
+        .map(row => Math.max(0, row.amountCentavos))
+    ),
+    capitalContributionsCentavos: sum(
+      capitalRows
+        .filter(
+          row =>
+            row.status === "posted" &&
+            row.transactionType === "capital_contribution"
+        )
+        .map(row => Math.max(0, row.amountCentavos))
+    ),
+    capitalWithdrawalsCentavos: sum(
+      capitalRows
+        .filter(
+          row =>
+            row.status === "posted" &&
+            (row.transactionType === "capital_withdrawal" ||
+              row.transactionType === "expense")
+        )
+        .map(row => Math.max(0, row.amountCentavos))
+    ),
+  };
+  await db
+    .insert(dailyReportSummaries)
+    .values(values)
+    .onDuplicateKeyUpdate({ set: values });
+}
+
+async function ensureDailyReportingReadModel(userId: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const [existing] = await db
+    .select({ total: count() })
+    .from(dailyReportSummaries);
+  if (Number(existing?.total ?? 0) > 0) return;
+  const [saleDates, expenseDates, inventoryDates, profitDates, capitalDates] =
+    await Promise.all([
+      db.select({ value: sales.saleDate }).from(sales),
+      db.select({ value: expenses.expenseDate }).from(expenses),
+      db
+        .select({ value: inventoryTransactions.transactionDate })
+        .from(inventoryTransactions),
+      db
+        .select({ value: profitLedgerEntries.entryDate })
+        .from(profitLedgerEntries),
+      db
+        .select({ value: capitalTransactions.transactionDate })
+        .from(capitalTransactions),
+    ]);
+  const dates = new Map<string, Date>();
+  for (const row of [
+    ...saleDates,
+    ...expenseDates,
+    ...inventoryDates,
+    ...profitDates,
+    ...capitalDates,
+  ]) {
+    const start = dayStart(row.value);
+    dates.set(dayKey(start), start);
+  }
+  if (!dates.size) dates.set(dayKey(new Date()), dayStart(new Date()));
+  for (const date of Array.from(dates.values()).sort(
+    (left, right) => left.getTime() - right.getTime()
+  )) {
+    await refreshDailyReportSummary(userId, date);
+  }
+}
+
+function summaryMetrics(
+  rows: Array<typeof dailyReportSummaries.$inferSelect>,
+  rangeDayCount = rows.length
+) {
+  const unitsSold = sum(rows.map(row => row.unitsSold));
+  const revenueCentavos = sum(rows.map(row => row.revenueCentavos));
+  const cogsCentavos = sum(rows.map(row => row.cogsCentavos));
+  const grossProfitCentavos = sum(rows.map(row => row.grossProfitCentavos));
+  const expensesCentavos = sum(rows.map(row => row.expensesCentavos));
+  const dayCount = Math.max(1, rangeDayCount);
+  const dailyUnits = rows.map(row => row.unitsSold).filter(value => value > 0);
+  return {
+    unitsSold,
+    revenueCentavos,
+    cogsCentavos,
+    grossProfitCentavos,
+    expensesCentavos,
+    netProfitCentavos: grossProfitCentavos - expensesCentavos,
+    cashCollectedCentavos: sum(rows.map(row => row.cashCollectedCentavos)),
+    cashVarianceCentavos: sum(rows.map(row => row.cashVarianceCentavos)),
+    averageUnitsPerDay: unitsSold / dayCount,
+    averageRevenuePerDay: revenueCentavos / dayCount,
+    averageProfitPerDay: grossProfitCentavos / dayCount,
+    grossMarginPercent:
+      revenueCentavos === 0 ? 0 : (grossProfitCentavos / revenueCentavos) * 100,
+    bestDayUnits: dailyUnits.length ? Math.max(...dailyUnits) : 0,
+    worstDayUnits: dailyUnits.length ? Math.min(...dailyUnits) : 0,
+  };
+}
+
+function daysInRange(start: Date, endExclusive: Date) {
+  return Math.max(
+    1,
+    Math.ceil((endExclusive.getTime() - start.getTime()) / 86_400_000)
+  );
+}
+
+export function calculateWeeklyReportHistoryFromSummaries(input: {
+  now: Date;
+  summaries: Array<
+    Pick<
+      typeof dailyReportSummaries.$inferSelect,
+      "summaryDate" | "unitsSold" | "grossProfitCentavos"
+    >
+  >;
+  targets: WeeklyTargetSnapshot[];
+  currentTargetUnits: number;
+  weeks?: number;
+}) {
+  const currentWeekStart = startOfMondayUtc(input.now);
+  const currentDataEnd = nextDay(dayStart(input.now));
+  const weekCount = Math.min(52, Math.max(1, input.weeks ?? 12));
+  const targetsByWeek = new Map(
+    input.targets.map(target => [
+      dayKey(startOfMondayUtc(target.weekStartDate)),
+      target.targetUnits,
+    ])
+  );
+  return Array.from({ length: weekCount }, (_, index) => {
+    const weekStartDate = new Date(
+      currentWeekStart.getTime() - index * 7 * 86_400_000
+    );
+    const weekEndExclusive = new Date(
+      weekStartDate.getTime() + 7 * 86_400_000
+    );
+    const dataEndExclusive = index === 0 ? currentDataEnd : weekEndExclusive;
+    const weekRows = input.summaries.filter(
+      row =>
+        row.summaryDate >= weekStartDate && row.summaryDate < dataEndExclusive
+    );
+    const unitsSold = sum(weekRows.map(row => row.unitsSold));
+    const targetUnits =
+      targetsByWeek.get(dayKey(weekStartDate)) ??
+      (index === 0 ? input.currentTargetUnits : null);
+    const completionPercent = targetUnits
+      ? (unitsSold / targetUnits) * 100
+      : null;
+    return {
+      weekStartDate: dayKey(weekStartDate),
+      weekEndDate: dayKey(new Date(weekEndExclusive.getTime() - 86_400_000)),
+      isCurrent: index === 0,
+      targetUnits,
+      unitsSold,
+      unitsRemaining:
+        targetUnits === null ? null : Math.max(0, targetUnits - unitsSold),
+      completionPercent,
+      targetReached: targetUnits === null ? null : unitsSold >= targetUnits,
+      profitEarnedCentavos: sum(
+        weekRows.map(row => row.grossProfitCentavos)
+      ),
+    };
+  }).filter(
+    week =>
+      week.isCurrent ||
+      week.targetUnits !== null ||
+      week.unitsSold !== 0 ||
+      week.profitEarnedCentavos !== 0
+  );
+}
+
+export function calculateWeeklyCapitalPositionHistoryFromSummaries(input: {
+  now: Date;
+  weeks: number;
+  unitsPerBox: number;
+  costPerUnitCentavos: number;
+  summaries: Array<
+    Pick<
+      typeof dailyReportSummaries.$inferSelect,
+      | "summaryDate"
+      | "inventoryUnitsDelta"
+      | "capitalContributionsCentavos"
+      | "capitalWithdrawalsCentavos"
+    >
+  >;
+}) {
+  const today = dayStart(input.now);
+  const currentWeekStart = startOfMondayUtc(today);
+  return Array.from({ length: Math.max(1, input.weeks) }, (_, index) => {
+    const weekStart = new Date(
+      currentWeekStart.getTime() -
+        (input.weeks - 1 - index) * 7 * 86_400_000
+    );
+    const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000);
+    const asOf = weekEnd > input.now ? input.now : weekEnd;
+    const rows = input.summaries.filter(row => row.summaryDate < asOf);
+    const inventoryUnits = sum(rows.map(row => row.inventoryUnitsDelta));
+    const ownerCapitalCentavos = sum(
+      rows.map(
+        row =>
+          row.capitalContributionsCentavos - row.capitalWithdrawalsCentavos
+      )
+    );
+    const inventoryValueCentavos = calculateInventoryValue(
+      inventoryUnits,
+      input.costPerUnitCentavos
+    );
+    const nextBoxFundCentavos = calculateCapitalBalancedNextBoxFund({
+      ownerCapitalCentavos,
+      inventoryValueCentavos,
+    });
+    return {
+      weekStart: dayKey(weekStart),
+      weekEnd: dayKey(new Date(weekEnd.getTime() - 1)),
+      label: weekStart.toLocaleDateString("en-PH", {
+        month: "short",
+        day: "numeric",
+      }),
+      inventoryUnits,
+      inventoryBoxes:
+        input.unitsPerBox > 0 ? inventoryUnits / input.unitsPerBox : 0,
+      ownerCapitalCentavos,
+      inventoryValueCentavos,
+      nextBoxFundCentavos,
+      reconciliationDeltaCentavos:
+        inventoryValueCentavos + nextBoxFundCentavos - ownerCapitalCentavos,
+    };
+  });
 }
 
 const pesoToCentavos = (value: number) => Math.round(value * 100);
@@ -1974,6 +2276,7 @@ export async function getDashboardRangeData(
   endDateValue: string
 ) {
   await ensureBusinessSetup(userId);
+  await ensureDailyReportingReadModel(userId);
   const start = dayStart(dateAtNoonUtc(startDateValue));
   const endDate = dayStart(dateAtNoonUtc(endDateValue));
   const endExclusive = nextDay(endDate);
@@ -1986,36 +2289,49 @@ export async function getDashboardRangeData(
     throw new Error("Custom ranges can cover up to 366 days.");
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
-  const [saleRows, expenseRows] = await Promise.all([
-    db
-      .select()
-      .from(sales)
-      .where(and(gte(sales.saleDate, start), lt(sales.saleDate, endExclusive)))
-      .orderBy(asc(sales.saleDate)),
-    db
-      .select()
-      .from(expenses)
-      .where(
-        and(
-          gte(expenses.expenseDate, start),
-          lt(expenses.expenseDate, endExclusive)
-        )
+  const summaryRows = await db
+    .select()
+    .from(dailyReportSummaries)
+    .where(
+      and(
+        gte(dailyReportSummaries.summaryDate, start),
+        lt(dailyReportSummaries.summaryDate, endExclusive)
       )
-      .orderBy(asc(expenses.expenseDate)),
-  ]);
+    )
+    .orderBy(asc(dailyReportSummaries.summaryDate));
+  const summaryByDay = new Map(
+    summaryRows.map(row => [dayKey(row.summaryDate), row])
+  );
   return {
     startDate: dayKey(start),
     endDate: dayKey(endDate),
-    metrics: periodMetrics(saleRows, expenseRows, start, endExclusive),
-    salesByDay: dailyPeriodSeries(saleRows, start, endExclusive),
+    metrics: summaryMetrics(summaryRows, dayCount),
+    salesByDay: Array.from({ length: dayCount }, (_, index) => {
+      const date = new Date(start.getTime() + index * 86_400_000);
+      const row = summaryByDay.get(dayKey(date));
+      return {
+        date: dayKey(date),
+        units: row?.unitsSold ?? 0,
+        revenueCentavos: row?.revenueCentavos ?? 0,
+      };
+    }),
   };
 }
 
 export async function getDashboardData(userId: number) {
   await ensureBusinessSetup(userId);
   await ensureTransitionPeriod(userId);
+  await ensureDailyReportingReadModel(userId);
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
+  const now = new Date();
+  const todayStart = dayStart(now);
+  const currentYearStart = new Date(
+    Date.UTC(now.getUTCFullYear(), 0, 1)
+  );
+  const reportStart = new Date(
+    startOfMondayUtc(now).getTime() - 52 * 7 * 86_400_000
+  );
   const [
     settingsRows,
     cashReconciliationRows,
@@ -2030,6 +2346,7 @@ export async function getDashboardData(userId: number) {
     closingRows,
     periodRows,
     weeklyTargetRows,
+    summaryRows,
   ] = await Promise.all([
     db.select().from(businessSettings).limit(1),
     db
@@ -2072,12 +2389,24 @@ export async function getDashboardData(userId: number) {
       .from(weeklyTargetSnapshots)
       .orderBy(desc(weeklyTargetSnapshots.weekStartDate))
       .limit(52),
+    db
+      .select()
+      .from(dailyReportSummaries)
+      .where(
+        and(
+          gte(
+            dailyReportSummaries.summaryDate,
+            reportStart < currentYearStart ? reportStart : currentYearStart
+          ),
+          lt(dailyReportSummaries.summaryDate, nextDay(todayStart))
+        )
+      )
+      .orderBy(asc(dailyReportSummaries.summaryDate)),
   ]);
   const settings = settingsRows[0];
   const product = productRows[0];
   if (!settings || !product)
     throw new Error("Business settings are incomplete.");
-  const now = new Date();
   const todayRange = rangeFor("today", now);
   const weekRanges = getMondayWeekRanges(now);
   const weekRange = {
@@ -2087,6 +2416,10 @@ export async function getDashboardData(userId: number) {
   const monthRange = rangeFor("month", now);
   const quarterRange = rangeFor("quarter", now);
   const yearRange = rangeFor("year", now);
+  const summariesInRange = (range: { start: Date; end: Date }) =>
+    summaryRows.filter(
+      row => row.summaryDate >= range.start && row.summaryDate < range.end
+    );
   const currentInventoryRows = inventoryRows.filter(
     row => row.transactionDate < nextDay(dayStart(now))
   );
@@ -2117,11 +2450,9 @@ export async function getDashboardData(userId: number) {
         sales: salesRows,
         inventory: currentInventoryRows,
       });
-  const todayMetrics = periodMetrics(
-    salesRows,
-    expenseRows,
-    todayRange.start,
-    todayRange.end
+  const todayMetrics = summaryMetrics(
+    summariesInRange(todayRange),
+    daysInRange(todayRange.start, todayRange.end)
   );
   const nextBoxFundToday = calculateTodayNextBoxFundBalance({
     todayCogsRecoveredCentavos: todayMetrics.cogsCentavos,
@@ -2132,25 +2463,24 @@ export async function getDashboardData(userId: number) {
   });
   const receivables: never[] = [];
   const outstandingReceivablesCentavos = 0;
-  const weekMetrics = periodMetrics(
-    salesRows,
-    expenseRows,
-    weekRange.start,
-    weekRange.end
+  const weekMetrics = summaryMetrics(
+    summariesInRange(weekRange),
+    daysInRange(weekRange.start, weekRange.end)
   );
-  const previousWeekMetrics = periodMetrics(
-    salesRows,
-    expenseRows,
-    weekRanges.previousWeekStart,
-    weekRanges.previousWeekEnd
+  const previousWeekMetrics = summaryMetrics(
+    summariesInRange({
+      start: weekRanges.previousWeekStart,
+      end: weekRanges.previousWeekEnd,
+    }),
+    daysInRange(weekRanges.previousWeekStart, weekRanges.previousWeekEnd)
   );
   const weeklyComparison = calculateWeeklyUnitComparison(
     weekMetrics.unitsSold,
     previousWeekMetrics.unitsSold
   );
-  const weeklyReportHistory = calculateWeeklyReportHistory({
+  const weeklyReportHistory = calculateWeeklyReportHistoryFromSummaries({
     now,
-    sales: salesRows,
+    summaries: summaryRows,
     targets: weeklyTargetRows,
     currentTargetUnits: settings.weeklyUnitsTarget,
     weeks: 12,
@@ -2161,27 +2491,29 @@ export async function getDashboardData(userId: number) {
     currentWeekUnitsSold: weekMetrics.unitsSold,
     weeklyTargetUnits: settings.weeklyUnitsTarget,
   });
-  const monthMetrics = periodMetrics(
-    salesRows,
-    expenseRows,
-    monthRange.start,
-    monthRange.end
+  const monthMetrics = summaryMetrics(
+    summariesInRange(monthRange),
+    daysInRange(monthRange.start, monthRange.end)
   );
-  const recent30 = periodMetrics(
-    salesRows,
-    expenseRows,
-    new Date(todayRange.start.getTime() - 29 * 86_400_000),
-    todayRange.end
+  const recent30 = summaryMetrics(
+    summariesInRange({
+      start: new Date(todayRange.start.getTime() - 29 * 86_400_000),
+      end: todayRange.end,
+    }),
+    daysInRange(
+      new Date(todayRange.start.getTime() - 29 * 86_400_000),
+      todayRange.end
+    )
   );
   const salesByWeek = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(weekRange.start.getTime() + index * 86_400_000);
-    const daySales = salesRows.filter(
-      sale => !sale.isVoided && dayKey(sale.saleDate) === dayKey(date)
+    const daySummary = summaryRows.find(
+      row => dayKey(row.summaryDate) === dayKey(date)
     );
     return {
       date: dayKey(date),
-      units: sum(daySales.map(sale => sale.unitsSold)),
-      revenueCentavos: sum(daySales.map(sale => sale.expectedRevenueCentavos)),
+      units: daySummary?.unitsSold ?? 0,
+      revenueCentavos: daySummary?.revenueCentavos ?? 0,
     };
   });
   const monthLabels = [
@@ -2201,16 +2533,14 @@ export async function getDashboardData(userId: number) {
   const salesByMonth = Array.from({ length: 12 }, (_, monthIndex) => {
     const start = new Date(Date.UTC(now.getUTCFullYear(), monthIndex, 1));
     const end = new Date(Date.UTC(now.getUTCFullYear(), monthIndex + 1, 1));
-    const monthSales = salesRows.filter(
-      sale => !sale.isVoided && sale.saleDate >= start && sale.saleDate < end
+    const monthSummaries = summaryRows.filter(
+      row => row.summaryDate >= start && row.summaryDate < end
     );
     return {
       date: dayKey(start),
       label: monthLabels[monthIndex],
-      units: sum(monthSales.map(sale => sale.unitsSold)),
-      revenueCentavos: sum(
-        monthSales.map(sale => sale.expectedRevenueCentavos)
-      ),
+      units: sum(monthSummaries.map(row => row.unitsSold)),
+      revenueCentavos: sum(monthSummaries.map(row => row.revenueCentavos)),
     };
   });
   const ownerSummaries = ownerRows.map(owner => {
@@ -2280,21 +2610,12 @@ export async function getDashboardData(userId: number) {
     inventoryValueCentavos +
     capitalBalancedNextBoxFundCentavos -
     totalOwnerCapitalCentavos;
-  const weeklyCapitalPositionHistory = calculateWeeklyCapitalPositionHistory({
+  const weeklyCapitalPositionHistory = calculateWeeklyCapitalPositionHistoryFromSummaries({
     now,
     weeks: 8,
     unitsPerBox: settings.unitsPerBox,
     costPerUnitCentavos: settings.defaultCostPerUnitCentavos,
-    inventory: currentInventoryRows.map(row => ({
-      transactionDate: row.transactionDate,
-      unitsDelta: row.unitsDelta,
-    })),
-    capital: capitalRows.map(row => ({
-      transactionDate: row.transactionDate,
-      status: row.status,
-      transactionType: row.transactionType,
-      amountCentavos: row.amountCentavos,
-    })),
+    summaries: summaryRows,
   });
   const totalProfitEarnedCentavos = sum(
     ownerSummaries.map(owner => owner.allocatedProfitCentavos)
@@ -2381,17 +2702,13 @@ export async function getDashboardData(userId: number) {
       week: weekMetrics,
       previousWeek: previousWeekMetrics,
       month: monthMetrics,
-      quarter: periodMetrics(
-        salesRows,
-        expenseRows,
-        quarterRange.start,
-        quarterRange.end
+      quarter: summaryMetrics(
+        summariesInRange(quarterRange),
+        daysInRange(quarterRange.start, quarterRange.end)
       ),
-      year: periodMetrics(
-        salesRows,
-        expenseRows,
-        yearRange.start,
-        yearRange.end
+      year: summaryMetrics(
+        summariesInRange(yearRange),
+        daysInRange(yearRange.start, yearRange.end)
       ),
     },
     weeklyComparison: {
@@ -2891,6 +3208,7 @@ export async function addSaleRecord(
       profitDistribution,
     }
   );
+  await refreshDailyReportSummary(userId, saleDate);
   return { saleId, saleCode, ...metrics, profitDistribution };
 }
 
@@ -2934,6 +3252,7 @@ export async function recordCustomerPayment(
       paymentStatus: balanceCentavos === 0 ? "paid" : "partially_paid",
     })
     .where(eq(sales.id, sale.id));
+  await refreshDailyReportSummary(userId, sale.saleDate);
   await recordAudit(
     userId,
     "created",
@@ -2989,6 +3308,7 @@ export async function addExpenseRecord(
     undefined,
     { amountPesos: input.amountPesos, description: input.description.trim() }
   );
+  await refreshDailyReportSummary(userId, dateAtNoonUtc(input.date));
   return { id, recordCode };
 }
 
@@ -3046,6 +3366,7 @@ export async function addCapitalTransaction(
     undefined,
     { transactionType: input.transactionType, amountPesos: input.amountPesos }
   );
+  await refreshDailyReportSummary(userId, dateAtNoonUtc(input.date));
   return { id, recordCode };
 }
 
@@ -3197,6 +3518,7 @@ export async function addInventoryPurchase(
       fundingSource: input.fundingSource,
     }
   );
+  await refreshDailyReportSummary(userId, transactionDate);
   return {
     id,
     recordCode,
@@ -3600,6 +3922,7 @@ export async function voidSaleRecord(
     .update(inventoryTransactions)
     .set({ recordCode: makeRecordCode("inventory", voidedAt, reversalId) })
     .where(eq(inventoryTransactions.id, reversalId));
+  await refreshDailyReportSummary(userId, sale.saleDate);
   const originalProfitEntries = await db
     .select()
     .from(profitLedgerEntries)
@@ -3625,6 +3948,7 @@ export async function voidSaleRecord(
         notes: input.reason.trim(),
       })
     : [];
+  await refreshDailyReportSummary(userId, voidedAt);
   await recordAudit(
     userId,
     "voided",
@@ -4231,6 +4555,7 @@ export async function recordProfitDistribution(
       owedAfterCentavos: owedCentavos - amountCentavos,
     }
   );
+  await refreshDailyReportSummary(userId, distributionDate);
   return {
     ...entry,
     ownerName: owner.name,
