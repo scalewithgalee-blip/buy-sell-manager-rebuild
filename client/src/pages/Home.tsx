@@ -144,6 +144,9 @@ const demo = {
   nextBoxFundCentavos: 0,
   capitalBalancedNextBoxFundCentavos: 0,
   actualCashNextBoxFundCentavos: 0,
+  capitalReconciliationDeltaCentavos: 0,
+  capitalReconciled: true,
+  weeklyCapitalPositionHistory: [],
   capitalDeployedCentavos: 21000000,
   capitalDeploymentPercent: 100,
   totalProfitEarnedCentavos: 0,
@@ -770,6 +773,18 @@ export default function Home() {
       dashboard.nextBoxFund?.availableCentavos ??
       0
   );
+  const capitalReconciliationDeltaCentavos = Number(
+    dashboard.capitalReconciliationDeltaCentavos ??
+      dashboard.inventoryValueCentavos +
+        nextBoxFundCentavos -
+        ownerCapitalCentavos
+  );
+  const capitalReconciled = Math.abs(capitalReconciliationDeltaCentavos) <= 1;
+  const weeklyCapitalPositionHistory = Array.isArray(
+    dashboard.weeklyCapitalPositionHistory
+  )
+    ? dashboard.weeklyCapitalPositionHistory
+    : [];
   const setup = setupQuery.data;
   const resilience = resilienceQuery.data as any;
   const restorePreview = restorePreviewQuery.data as any;
@@ -1415,6 +1430,22 @@ export default function Home() {
               Hide details
             </button>
           </div>
+          {!capitalReconciled && (
+            <div className="mx-5 mt-4 flex items-start gap-3 rounded-lg border border-[#f1b8b1] bg-[#fff1ef] p-3 text-[#9d3f35]">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold">
+                  Capital reconciliation warning
+                </p>
+                <p className="mt-1 text-xs leading-5">
+                  Inventory value plus the displayed Next Box Fund differs from
+                  posted owner capital by{" "}
+                  {peso(Math.abs(capitalReconciliationDeltaCentavos))}. Review
+                  the latest inventory, capital, or reconciliation record.
+                </p>
+              </div>
+            </div>
+          )}
           <div className="grid gap-3 border-b border-[#eeeef4] p-5 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-lg bg-[#f0efff] p-3">
               <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
@@ -1475,6 +1506,111 @@ export default function Home() {
                 {peso(actualCashNextBoxFundCentavos)}
               </p>
             </div>
+          </div>
+          <div className="border-t border-[#eeeef4] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#6d5dfc]">
+                  Weekly capital position
+                </p>
+                <h4 className="mt-1 text-base font-semibold text-[#17182b]">
+                  Inventory, Next Box Fund, and posted capital
+                </h4>
+                <p className="mt-1 text-xs leading-5 text-[#8d90a2]">
+                  Each point uses the ledger position at that week’s end. The
+                  reconciliation line should remain at zero.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3 text-[11px] text-[#8d90a2]">
+                <span>
+                  <i className="mr-1 inline-block h-2 w-2 rounded-full bg-[#17182b]" />
+                  Capital
+                </span>
+                <span>
+                  <i className="mr-1 inline-block h-2 w-2 rounded-full bg-[#6d5dfc]" />
+                  Inventory
+                </span>
+                <span>
+                  <i className="mr-1 inline-block h-2 w-2 rounded-full bg-[#21a179]" />
+                  Next Box Fund
+                </span>
+              </div>
+            </div>
+            {weeklyCapitalPositionHistory.length > 0 ? (
+              <div className="mt-4 h-[230px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={weeklyCapitalPositionHistory}
+                    margin={{ top: 12, right: 4, left: -24, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="4 4"
+                      vertical={false}
+                      stroke="#ececf3"
+                    />
+                    <XAxis
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#9799aa", fontSize: 10 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#a3a5b3", fontSize: 10 }}
+                      tickFormatter={(value: number) =>
+                        `₱${Math.round(value / 1000)}k`
+                      }
+                    />
+                    <ChartTooltip
+                      cursor={{ stroke: "#7566f5", strokeDasharray: "4 4" }}
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: "1px solid #e7e5f3",
+                        boxShadow: "0 10px 30px rgba(34,32,73,.12)",
+                        fontSize: 12,
+                      }}
+                      formatter={(value: any, name: any) => [
+                        peso(Number(value)),
+                        name,
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="ownerCapitalCentavos"
+                      name="Capital"
+                      stroke="#17182b"
+                      fill="#17182b"
+                      fillOpacity={0.04}
+                      strokeWidth={2}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="inventoryValueCentavos"
+                      name="Inventory"
+                      stroke="#6d5dfc"
+                      fill="#6d5dfc"
+                      fillOpacity={0.08}
+                      strokeWidth={2}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="nextBoxFundCentavos"
+                      name="Next Box Fund"
+                      stroke="#21a179"
+                      fill="#21a179"
+                      fillOpacity={0.08}
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <p className="mt-4 rounded-lg bg-[#f7f7fb] p-4 text-sm text-[#8d90a2]">
+                Weekly history will appear after the first dated capital or
+                inventory record.
+              </p>
+            )}
           </div>
         </section>
       )}

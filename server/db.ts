@@ -475,6 +475,81 @@ export function calculateCapitalBalancedNextBoxFund(input: {
   return input.ownerCapitalCentavos - input.inventoryValueCentavos;
 }
 
+export function calculateWeeklyCapitalPositionHistory(input: {
+  now: Date;
+  weeks: number;
+  unitsPerBox: number;
+  costPerUnitCentavos: number;
+  inventory: Array<{ transactionDate: Date; unitsDelta: number }>;
+  capital: Array<{
+    transactionDate: Date;
+    status: string;
+    transactionType: string;
+    amountCentavos: number;
+  }>;
+}) {
+  const today = new Date(
+    Date.UTC(
+      input.now.getUTCFullYear(),
+      input.now.getUTCMonth(),
+      input.now.getUTCDate()
+    )
+  );
+  const mondayOffset = (today.getUTCDay() + 6) % 7;
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setUTCDate(today.getUTCDate() - mondayOffset);
+
+  return Array.from({ length: Math.max(1, input.weeks) }, (_, index) => {
+    const weekStart = new Date(currentWeekStart);
+    weekStart.setUTCDate(
+      currentWeekStart.getUTCDate() - (input.weeks - 1 - index) * 7
+    );
+    const weekEnd = new Date(weekStart);
+    weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
+    const asOf = weekEnd > input.now ? input.now : weekEnd;
+    const inventoryUnits = sum(
+      input.inventory
+        .filter(row => row.transactionDate < asOf)
+        .map(row => row.unitsDelta)
+    );
+    const ownerCapitalCentavos = sum(
+      input.capital
+        .filter(row => row.status === "posted" && row.transactionDate < asOf)
+        .map(row =>
+          row.transactionType === "capital_withdrawal"
+            ? -Math.abs(row.amountCentavos)
+            : row.transactionType === "capital_contribution"
+              ? Math.abs(row.amountCentavos)
+              : 0
+        )
+    );
+    const inventoryValueCentavos = calculateInventoryValue(
+      inventoryUnits,
+      input.costPerUnitCentavos
+    );
+    const nextBoxFundCentavos = calculateCapitalBalancedNextBoxFund({
+      ownerCapitalCentavos,
+      inventoryValueCentavos,
+    });
+    return {
+      weekStart: dayKey(weekStart),
+      weekEnd: dayKey(new Date(weekEnd.getTime() - 1)),
+      label: weekStart.toLocaleDateString("en-PH", {
+        month: "short",
+        day: "numeric",
+      }),
+      inventoryUnits,
+      inventoryBoxes:
+        input.unitsPerBox > 0 ? inventoryUnits / input.unitsPerBox : 0,
+      ownerCapitalCentavos,
+      inventoryValueCentavos,
+      nextBoxFundCentavos,
+      reconciliationDeltaCentavos:
+        inventoryValueCentavos + nextBoxFundCentavos - ownerCapitalCentavos,
+    };
+  });
+}
+
 export function calculateInventoryPurchase(
   boxes: number,
   unitsPerBox: number,
@@ -2201,6 +2276,26 @@ export async function getDashboardData(userId: number) {
       ownerCapitalCentavos: totalOwnerCapitalCentavos,
       inventoryValueCentavos,
     });
+  const capitalReconciliationDeltaCentavos =
+    inventoryValueCentavos +
+    capitalBalancedNextBoxFundCentavos -
+    totalOwnerCapitalCentavos;
+  const weeklyCapitalPositionHistory = calculateWeeklyCapitalPositionHistory({
+    now,
+    weeks: 8,
+    unitsPerBox: settings.unitsPerBox,
+    costPerUnitCentavos: settings.defaultCostPerUnitCentavos,
+    inventory: currentInventoryRows.map(row => ({
+      transactionDate: row.transactionDate,
+      unitsDelta: row.unitsDelta,
+    })),
+    capital: capitalRows.map(row => ({
+      transactionDate: row.transactionDate,
+      status: row.status,
+      transactionType: row.transactionType,
+      amountCentavos: row.amountCentavos,
+    })),
+  });
   const totalProfitEarnedCentavos = sum(
     ownerSummaries.map(owner => owner.allocatedProfitCentavos)
   );
@@ -2257,6 +2352,9 @@ export async function getDashboardData(userId: number) {
     nextBoxFundCentavos: capitalBalancedNextBoxFundCentavos,
     capitalBalancedNextBoxFundCentavos,
     actualCashNextBoxFundCentavos: nextBoxFund.availableCentavos,
+    capitalReconciliationDeltaCentavos,
+    capitalReconciled: Math.abs(capitalReconciliationDeltaCentavos) <= 1,
+    weeklyCapitalPositionHistory,
     // The primary fund carries forward across days; retain the daily diagnostic separately.
     nextBoxFundTodayCentavos: nextBoxFundToday.availableCentavos,
     nextBoxFundToday,

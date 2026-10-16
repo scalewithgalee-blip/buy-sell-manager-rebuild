@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateCapitalBalancedNextBoxFund,
   calculateCashBasedNextBoxFund,
+  calculateWeeklyCapitalPositionHistory,
 } from "./db";
 
 const baseline = new Date("2026-10-03T10:00:00.000Z");
@@ -25,6 +26,39 @@ describe("cash-based Next Box Fund", () => {
 
     expect(result).toBe(3_010_000);
     expect(result + 257 * 70_000).toBe(21_000_000);
+  });
+
+  it("reconstructs weekly capital position and reconciliation delta", () => {
+    const history = calculateWeeklyCapitalPositionHistory({
+      now: new Date("2026-10-16T12:00:00.000Z"),
+      weeks: 2,
+      unitsPerBox: 50,
+      costPerUnitCentavos: 70_000,
+      inventory: [
+        {
+          transactionDate: new Date("2026-10-11T10:00:00.000Z"),
+          unitsDelta: 268,
+        },
+        {
+          transactionDate: new Date("2026-10-14T10:00:00.000Z"),
+          unitsDelta: -11,
+        },
+      ],
+      capital: [
+        {
+          transactionDate: new Date("2026-10-11T09:00:00.000Z"),
+          status: "posted",
+          transactionType: "capital_contribution",
+          amountCentavos: 21_000_000,
+        },
+      ],
+    });
+
+    expect(history).toHaveLength(2);
+    expect(history[0]?.inventoryUnits).toBe(268);
+    expect(history[1]?.inventoryUnits).toBe(257);
+    expect(history[1]?.nextBoxFundCentavos).toBe(3_010_000);
+    expect(history[1]?.reconciliationDeltaCentavos).toBe(0);
   });
 
   it("starts from reconciled cash instead of owner capital", () => {
