@@ -1,0 +1,2 @@
+ALTER TABLE `separateInventoryTransactions` MODIFY COLUMN `separateInventoryTransactionType` enum('purchase','sale','adjustment','loss','cash_adjustment','personal_withdrawal') NOT NULL;--> statement-breakpoint
+ALTER TABLE `separateInventoryTransactions` ADD `withdrawalCategory` varchar(80);

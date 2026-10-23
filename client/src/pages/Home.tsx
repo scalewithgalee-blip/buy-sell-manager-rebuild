@@ -688,6 +688,26 @@ export default function Home() {
     description: "",
     notes: "",
   });
+  const [separateWithdrawal, setSeparateWithdrawal] = useState({
+    date: today(),
+    category: "personal_use" as
+      | "personal_use"
+      | "transport"
+      | "food"
+      | "family"
+      | "emergency"
+      | "other",
+    amount: "",
+    description: "",
+    notes: "",
+  });
+  const [separateAuditFilter, setSeparateAuditFilter] = useState({
+    type: "all",
+    category: "all",
+    search: "",
+    from: "",
+    to: "",
+  });
   const [capital, setCapital] = useState({
     date: today(),
     amount: "",
@@ -829,7 +849,66 @@ export default function Home() {
     salesCogsCentavos: 0,
     grossProfitCentavos: 0,
     cashBalanceCentavos: 0,
+    totalWithdrawalsCentavos: 0,
+    withdrawalTotalsByCategory: [],
   }) as any;
+  const filteredSeparateRows = useMemo(() => {
+    const search = separateAuditFilter.search.trim().toLowerCase();
+    return separateInventory.rows.filter((row: any) => {
+      const rowDate = new Date(row.transactionDate).toISOString().slice(0, 10);
+      const matchesType =
+        separateAuditFilter.type === "all" || row.transactionType === separateAuditFilter.type;
+      const matchesCategory =
+        separateAuditFilter.category === "all" ||
+        row.withdrawalCategory === separateAuditFilter.category;
+      const matchesSearch =
+        !search ||
+        [row.recordCode, row.description, row.notes, row.withdrawalCategory]
+          .filter(Boolean)
+          .some((value: unknown) => String(value).toLowerCase().includes(search));
+      const matchesFrom = !separateAuditFilter.from || rowDate >= separateAuditFilter.from;
+      const matchesTo = !separateAuditFilter.to || rowDate <= separateAuditFilter.to;
+      return matchesType && matchesCategory && matchesSearch && matchesFrom && matchesTo;
+    });
+  }, [separateInventory.rows, separateAuditFilter]);
+  const exportSeparateAudit = () => {
+    const escapeCsv = (value: unknown) =>
+      `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const header = [
+      "Date",
+      "Type",
+      "Category",
+      "Description",
+      "Record code",
+      "Units delta",
+      "Cash delta",
+      "Revenue",
+      "Notes",
+    ];
+    const rows = filteredSeparateRows.map((row: any) => [
+        new Date(row.transactionDate).toISOString().slice(0, 10),
+        row.transactionType,
+        row.withdrawalCategory ?? "",
+        row.description,
+        row.recordCode,
+        row.unitsDelta,
+        row.cashCollectedCentavos / 100,
+        row.revenueCentavos / 100,
+        row.notes ?? "",
+      ]);
+    const csv = [header, ...rows]
+      .map(row => row.map(escapeCsv).join(","))
+      .join("\n");
+    const blob = new Blob([csv], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `separate-inventory-${today()}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
   const resilience = resilienceQuery.data as any;
   const restorePreview = restorePreviewQuery.data as any;
   const history = historyQuery.data as any;
@@ -1016,6 +1095,23 @@ export default function Home() {
           date: today(),
           unitsDelta: "",
           cashDelta: "",
+          description: "",
+          notes: "",
+        }));
+        utils.business.separateInventory.invalidate();
+      },
+      onError: error => toast.error(error.message),
+    });
+  const addSeparateWithdrawal =
+    trpc.business.addSeparateInventoryWithdrawal.useMutation({
+      onSuccess: result => {
+        toast.success(
+          `Personal withdrawal saved: ${peso(result.amountCentavos)} under ${result.category.replace("_", " ")}.`
+        );
+        setSeparateWithdrawal(current => ({
+          ...current,
+          date: today(),
+          amount: "",
           description: "",
           notes: "",
         }));
@@ -4139,6 +4235,124 @@ export default function Home() {
           </button>
         </form>
       </div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
+        <form
+          className="panel p-5"
+          onSubmit={event => {
+            event.preventDefault();
+            const amount = Number(separateWithdrawal.amount);
+            if (!amount || amount <= 0)
+              return toast.error("Enter a withdrawal amount greater than zero.");
+            addSeparateWithdrawal.mutate({
+              date: separateWithdrawal.date,
+              category: separateWithdrawal.category,
+              amountPesos: amount,
+              description: separateWithdrawal.description || undefined,
+              notes: separateWithdrawal.notes || undefined,
+            });
+          }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
+            Personal cash
+          </p>
+          <h3 className="mt-1 text-xl font-semibold text-[#17182b]">
+            Record withdrawal
+          </h3>
+          <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
+            Categorized withdrawals reduce your personal cash balance only. They
+            never become shared-business expenses or owner capital withdrawals.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Date</Label>
+              <input
+                required
+                type="date"
+                value={separateWithdrawal.date}
+                onChange={event => setSeparateWithdrawal({ ...separateWithdrawal, date: event.target.value })}
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Category</Label>
+              <select
+                value={separateWithdrawal.category}
+                onChange={event => setSeparateWithdrawal({ ...separateWithdrawal, category: event.target.value as typeof separateWithdrawal.category })}
+                className="field mt-1"
+              >
+                <option value="personal_use">Personal use</option>
+                <option value="transport">Transport</option>
+                <option value="food">Food</option>
+                <option value="family">Family</option>
+                <option value="emergency">Emergency</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Amount (₱)</Label>
+              <input
+                required
+                min="0.01"
+                step="0.01"
+                type="number"
+                value={separateWithdrawal.amount}
+                onChange={event => setSeparateWithdrawal({ ...separateWithdrawal, amount: event.target.value })}
+                placeholder="500"
+                className="field mt-1"
+              />
+            </div>
+          </div>
+          <Label>Description</Label>
+          <input
+            value={separateWithdrawal.description}
+            onChange={event => setSeparateWithdrawal({ ...separateWithdrawal, description: event.target.value })}
+            placeholder="Optional detail"
+            className="field mt-1"
+          />
+          <Label>Notes</Label>
+          <textarea
+            value={separateWithdrawal.notes}
+            onChange={event => setSeparateWithdrawal({ ...separateWithdrawal, notes: event.target.value })}
+            placeholder="Receipt or context"
+            className="field mt-1 min-h-[64px] resize-none"
+          />
+          <button disabled={addSeparateWithdrawal.isPending} className="btn-secondary mt-4 w-full justify-center">
+            {addSeparateWithdrawal.isPending ? "Saving…" : "Save personal withdrawal"}
+          </button>
+        </form>
+        <section className="panel p-5">
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
+            Withdrawal breakdown
+          </p>
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-semibold text-[#17182b]">{peso(separateInventory.totalWithdrawalsCentavos)}</h3>
+              <p className="mt-1 text-sm text-[#8d90a2]">Total personal withdrawals</p>
+            </div>
+            <Wallet className="h-7 w-7 text-[#6d5dfc]" />
+          </div>
+          <div className="mt-5 space-y-3">
+            {separateInventory.withdrawalTotalsByCategory.length ? (
+              separateInventory.withdrawalTotalsByCategory.map((item: any) => (
+                <div key={item.category}>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="capitalize text-[#64687b]">{item.category.replaceAll("_", " ")}</span>
+                    <strong className="text-[#17182b]">{peso(item.amountCentavos)}</strong>
+                  </div>
+                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-[#f0efff]">
+                    <div
+                      className="h-full rounded-full bg-[#6d5dfc]"
+                      style={{ width: `${separateInventory.totalWithdrawalsCentavos ? Math.min(100, (item.amountCentavos / separateInventory.totalWithdrawalsCentavos) * 100) : 0}%` }}
+                    />
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-lg bg-[#faf9ff] p-4 text-sm text-[#8d90a2]">No personal withdrawals recorded yet.</p>
+            )}
+          </div>
+        </section>
+      </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
         <form
           className="panel p-5"
@@ -4251,8 +4465,67 @@ export default function Home() {
             <h3 className="mt-1 text-lg font-semibold text-[#17182b]">
               Purchases, sales, and corrections
             </h3>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <select
+                value={separateAuditFilter.type}
+                onChange={event => setSeparateAuditFilter({ ...separateAuditFilter, type: event.target.value })}
+                className="field"
+                aria-label="Filter personal ledger by type"
+              >
+                <option value="all">All entry types</option>
+                <option value="purchase">Purchases</option>
+                <option value="sale">Sales</option>
+                <option value="personal_withdrawal">Withdrawals</option>
+                <option value="adjustment">Adjustments</option>
+                <option value="loss">Losses</option>
+                <option value="cash_adjustment">Cash adjustments</option>
+              </select>
+              <select
+                value={separateAuditFilter.category}
+                onChange={event => setSeparateAuditFilter({ ...separateAuditFilter, category: event.target.value })}
+                className="field"
+                aria-label="Filter personal ledger by withdrawal category"
+              >
+                <option value="all">All categories</option>
+                <option value="personal_use">Personal use</option>
+                <option value="transport">Transport</option>
+                <option value="food">Food</option>
+                <option value="family">Family</option>
+                <option value="emergency">Emergency</option>
+                <option value="other">Other</option>
+              </select>
+              <input
+                value={separateAuditFilter.search}
+                onChange={event => setSeparateAuditFilter({ ...separateAuditFilter, search: event.target.value })}
+                placeholder="Search description or code"
+                className="field"
+                aria-label="Search personal ledger"
+              />
+              <input
+                type="date"
+                value={separateAuditFilter.from}
+                onChange={event => setSeparateAuditFilter({ ...separateAuditFilter, from: event.target.value })}
+                className="field"
+                aria-label="Filter personal ledger from date"
+              />
+              <input
+                type="date"
+                value={separateAuditFilter.to}
+                onChange={event => setSeparateAuditFilter({ ...separateAuditFilter, to: event.target.value })}
+                className="field"
+                aria-label="Filter personal ledger to date"
+              />
+              <button
+                type="button"
+                onClick={exportSeparateAudit}
+                disabled={!filteredSeparateRows.length}
+                className="btn-secondary justify-center"
+              >
+                <Download className="h-4 w-4" /> Export CSV ({filteredSeparateRows.length})
+              </button>
+            </div>
           </div>
-          {separateInventory.rows.length ? (
+          {filteredSeparateRows.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] text-left text-sm">
                 <thead className="bg-[#faf9ff] text-[10px] uppercase tracking-[.12em] text-[#8d90a2]">
@@ -4265,7 +4538,7 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f0f0f5]">
-                  {separateInventory.rows.map((row: any) => {
+                  {filteredSeparateRows.map((row: any) => {
                     const profit = row.revenueCentavos - Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos;
                     return (
                       <tr key={row.id} className="text-[#64687b]">

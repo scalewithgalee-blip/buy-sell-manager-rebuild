@@ -33,6 +33,7 @@ import {
   addSeparateInventoryAdjustment,
   addSeparateInventoryPurchase,
   addSeparateInventorySale,
+  addSeparateInventoryWithdrawal,
   getSeparateInventoryData,
   reopenBusinessDay,
   runIntegrityCheck,
@@ -157,6 +158,26 @@ export const appRouter = router({
       )
       .mutation(({ ctx, input }) =>
         addSeparateInventoryAdjustment(ctx.user?.id ?? 0, input)
+      ),
+    addSeparateInventoryWithdrawal: publicAccessProcedure
+      .input(
+        z.object({
+          date: day,
+          category: z.enum([
+            "personal_use",
+            "transport",
+            "food",
+            "family",
+            "emergency",
+            "other",
+          ]),
+          amountPesos: z.number().positive().max(10_000_000_000),
+          description: z.string().max(255).optional(),
+          notes: z.string().max(2_000).optional(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        addSeparateInventoryWithdrawal(ctx.user?.id ?? 0, input)
       ),
     addSale: publicAccessProcedure
       .input(

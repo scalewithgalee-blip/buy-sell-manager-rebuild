@@ -99,23 +99,18 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
-export async function getSeparateInventoryData(userId: number) {
-  void userId;
-  const db = await getDb();
-  if (!db) throw new Error("Database is unavailable.");
-  const [rows, settingsRows] = await Promise.all([
-    db
-      .select()
-      .from(separateInventoryTransactions)
-      .orderBy(
-        desc(separateInventoryTransactions.transactionDate),
-        desc(separateInventoryTransactions.id)
-      ),
-    db.select().from(businessSettings).limit(1),
-  ]);
-  const settings = settingsRows[0];
-  const unitsPerBox = settings?.unitsPerBox ?? 50;
-  const defaultCostPerUnitCentavos = settings?.defaultCostPerUnitCentavos ?? 0;
+export function calculateSeparateInventoryBalances(
+  rows: Array<{
+    transactionType: string;
+    withdrawalCategory?: string | null;
+    unitsDelta: number;
+    costPerUnitCentavos: number;
+    revenueCentavos: number;
+    cashCollectedCentavos: number;
+  }>,
+  unitsPerBox: number,
+  defaultCostPerUnitCentavos = 0
+) {
   const currentUnits = sum(rows.map(row => row.unitsDelta));
   const inventoryValueCentavos = sum(
     rows.map(row =>
@@ -143,8 +138,18 @@ export async function getSeparateInventoryData(userId: number) {
       .map(row => Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos)
   );
   const cashBalanceCentavos = sum(rows.map(row => row.cashCollectedCentavos));
+  const withdrawalTotalsByCategory = Object.entries(
+    rows
+      .filter(row => row.transactionType === "personal_withdrawal")
+      .reduce<Record<string, number>>((totals, row) => {
+        const category = row.withdrawalCategory || "other";
+        totals[category] = (totals[category] ?? 0) + Math.abs(row.cashCollectedCentavos);
+        return totals;
+      }, {})
+  )
+    .map(([category, amountCentavos]) => ({ category, amountCentavos }))
+    .sort((a, b) => b.amountCentavos - a.amountCentavos);
   return {
-    rows: rows.slice(0, 200),
     unitsPerBox,
     currentUnits,
     currentBoxes: unitsPerBox > 0 ? currentUnits / unitsPerBox : 0,
@@ -155,7 +160,90 @@ export async function getSeparateInventoryData(userId: number) {
     salesCogsCentavos,
     grossProfitCentavos: salesRevenueCentavos - salesCogsCentavos,
     cashBalanceCentavos,
+    totalWithdrawalsCentavos: sum(
+      rows
+        .filter(row => row.transactionType === "personal_withdrawal")
+        .map(row => Math.abs(row.cashCollectedCentavos))
+    ),
+    withdrawalTotalsByCategory,
   };
+}
+
+export async function getSeparateInventoryData(userId: number) {
+  void userId;
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const [rows, settingsRows] = await Promise.all([
+    db
+      .select()
+      .from(separateInventoryTransactions)
+      .orderBy(
+        desc(separateInventoryTransactions.transactionDate),
+        desc(separateInventoryTransactions.id)
+      ),
+    db.select().from(businessSettings).limit(1),
+  ]);
+  const settings = settingsRows[0];
+  return {
+    rows: rows.slice(0, 200),
+    ...calculateSeparateInventoryBalances(
+      rows,
+      settings?.unitsPerBox ?? 50,
+      settings?.defaultCostPerUnitCentavos ?? 0
+    ),
+  };
+}
+
+export type SeparateWithdrawalCategory =
+  | "personal_use"
+  | "transport"
+  | "food"
+  | "family"
+  | "emergency"
+  | "other";
+
+export async function addSeparateInventoryWithdrawal(
+  userId: number,
+  input: {
+    date: string;
+    category: SeparateWithdrawalCategory;
+    amountPesos: number;
+    description?: string;
+    notes?: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const amountCentavos = pesoToCentavos(input.amountPesos);
+  if (amountCentavos <= 0) throw new Error("Withdrawal must be greater than zero.");
+  const transactionDate = dateAtNoonUtc(input.date);
+  const description = input.description?.trim() || `Personal withdrawal: ${input.category.replace("_", " ")}`;
+  const inserted = await db.insert(separateInventoryTransactions).values({
+    recordCode: "pending",
+    transactionDate,
+    transactionType: "personal_withdrawal",
+    withdrawalCategory: input.category,
+    unitsDelta: 0,
+    cashCollectedCentavos: -amountCentavos,
+    description,
+    notes: input.notes?.trim() || null,
+    createdBy: userId,
+    updatedBy: userId,
+  });
+  const id = Number((inserted as any)[0]?.insertId ?? (inserted as any).insertId);
+  const recordCode = makeRecordCode("personal-withdrawal", transactionDate, id);
+  await db
+    .update(separateInventoryTransactions)
+    .set({ recordCode })
+    .where(eq(separateInventoryTransactions.id, id));
+  await recordAudit(
+    userId,
+    "created",
+    "separate_inventory",
+    recordCode,
+    `Recorded a personal withdrawal under ${input.category}.`
+  );
+  return { id, recordCode, amountCentavos, category: input.category };
 }
 
 export async function addSeparateInventoryPurchase(
