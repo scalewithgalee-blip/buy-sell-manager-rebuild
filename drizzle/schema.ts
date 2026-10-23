@@ -320,6 +320,39 @@ export const inventoryTransactions = mysqlTable(
   ]
 );
 
+/** Personal inventory ledger kept completely outside the shared business ledger. */
+export const separateInventoryTransactions = mysqlTable(
+  "separateInventoryTransactions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    recordCode: varchar("recordCode", { length: 64 }).notNull().unique(),
+    transactionDate: timestamp("transactionDate").notNull(),
+    transactionType: mysqlEnum("separateInventoryTransactionType", [
+      "purchase",
+      "sale",
+      "adjustment",
+      "loss",
+      "cash_adjustment",
+    ]).notNull(),
+    unitsDelta: int("unitsDelta").notNull().default(0),
+    costPerUnitCentavos: int("costPerUnitCentavos").notNull().default(0),
+    sellingPriceCentavos: int("sellingPriceCentavos").notNull().default(0),
+    revenueCentavos: int("revenueCentavos").notNull().default(0),
+    cashCollectedCentavos: int("cashCollectedCentavos").notNull().default(0),
+    description: varchar("description", { length: 255 }).notNull(),
+    notes: text("notes"),
+    createdBy: int("createdBy"),
+    updatedBy: int("updatedBy"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    index("separate_inventory_date_idx").on(table.transactionDate),
+    index("separate_inventory_type_idx").on(table.transactionType),
+    index("separate_inventory_created_at_idx").on(table.createdAt),
+  ]
+);
+
 export const payments = mysqlTable(
   "payments",
   {

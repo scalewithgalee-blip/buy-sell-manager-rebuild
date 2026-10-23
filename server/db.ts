@@ -39,6 +39,7 @@ import {
   profitAllocations,
   profitLedgerEntries,
   sales,
+  separateInventoryTransactions,
   type InsertUser,
   users,
   weeklyTargetSnapshots,
@@ -96,6 +97,193 @@ export async function getUserByOpenId(openId: string) {
     .where(eq(users.openId, openId))
     .limit(1);
   return result[0];
+}
+
+export async function getSeparateInventoryData(userId: number) {
+  void userId;
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const [rows, settingsRows] = await Promise.all([
+    db
+      .select()
+      .from(separateInventoryTransactions)
+      .orderBy(
+        desc(separateInventoryTransactions.transactionDate),
+        desc(separateInventoryTransactions.id)
+      ),
+    db.select().from(businessSettings).limit(1),
+  ]);
+  const settings = settingsRows[0];
+  const unitsPerBox = settings?.unitsPerBox ?? 50;
+  const defaultCostPerUnitCentavos = settings?.defaultCostPerUnitCentavos ?? 0;
+  const currentUnits = sum(rows.map(row => row.unitsDelta));
+  const inventoryValueCentavos = sum(
+    rows.map(row =>
+      row.unitsDelta * (row.costPerUnitCentavos || defaultCostPerUnitCentavos)
+    )
+  );
+  const totalPurchasedUnits = sum(
+    rows
+      .filter(row => row.transactionType === "purchase")
+      .map(row => Math.max(0, row.unitsDelta))
+  );
+  const totalSoldUnits = sum(
+    rows
+      .filter(row => row.transactionType === "sale")
+      .map(row => Math.max(0, -row.unitsDelta))
+  );
+  const salesRevenueCentavos = sum(
+    rows
+      .filter(row => row.transactionType === "sale")
+      .map(row => Math.max(0, row.revenueCentavos))
+  );
+  const salesCogsCentavos = sum(
+    rows
+      .filter(row => row.transactionType === "sale")
+      .map(row => Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos)
+  );
+  const cashBalanceCentavos = sum(rows.map(row => row.cashCollectedCentavos));
+  return {
+    rows: rows.slice(0, 200),
+    unitsPerBox,
+    currentUnits,
+    currentBoxes: unitsPerBox > 0 ? currentUnits / unitsPerBox : 0,
+    inventoryValueCentavos,
+    totalPurchasedUnits,
+    totalSoldUnits,
+    salesRevenueCentavos,
+    salesCogsCentavos,
+    grossProfitCentavos: salesRevenueCentavos - salesCogsCentavos,
+    cashBalanceCentavos,
+  };
+}
+
+export async function addSeparateInventoryPurchase(
+  userId: number,
+  input: {
+    date: string;
+    boxes: number;
+    extraUnits: number;
+    unitsPerBox: number;
+    costPerBoxPesos: number;
+    notes?: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const units = input.boxes * input.unitsPerBox + input.extraUnits;
+  if (units <= 0) throw new Error("Purchase must add at least one unit.");
+  const totalCostCentavos = pesoToCentavos(
+    input.boxes * input.costPerBoxPesos +
+      (input.extraUnits / input.unitsPerBox) * input.costPerBoxPesos
+  );
+  const costPerUnitCentavos = Math.round(totalCostCentavos / units);
+  const transactionDate = dateAtNoonUtc(input.date);
+  const inserted = await db.insert(separateInventoryTransactions).values({
+    recordCode: "pending",
+    transactionDate,
+    transactionType: "purchase",
+    unitsDelta: units,
+    costPerUnitCentavos,
+    cashCollectedCentavos: -totalCostCentavos,
+    description: `Personal purchase: ${input.boxes} box${input.boxes === 1 ? "" : "es"}${input.extraUnits ? ` + ${input.extraUnits} extra units` : ""}`,
+    notes: input.notes?.trim() || null,
+    createdBy: userId,
+    updatedBy: userId,
+  });
+  const id = Number((inserted as any)[0]?.insertId ?? (inserted as any).insertId);
+  const recordCode = makeRecordCode("personal-inventory", transactionDate, id);
+  await db
+    .update(separateInventoryTransactions)
+    .set({ recordCode })
+    .where(eq(separateInventoryTransactions.id, id));
+  await recordAudit(userId, "created", "separate_inventory", recordCode, "Recorded a personal inventory purchase.");
+  return { id, recordCode, unitsAdded: units, totalCostCentavos };
+}
+
+export async function addSeparateInventorySale(
+  userId: number,
+  input: {
+    date: string;
+    unitsSold: number;
+    costPerUnitPesos: number;
+    sellingPricePerUnitPesos: number;
+    cashCollectedPesos: number;
+    notes?: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const existing = await getSeparateInventoryData(userId);
+  if (input.unitsSold > existing.currentUnits)
+    throw new Error(`Only ${existing.currentUnits} personal units are available.`);
+  const costPerUnitCentavos = pesoToCentavos(input.costPerUnitPesos);
+  const sellingPriceCentavos = pesoToCentavos(input.sellingPricePerUnitPesos);
+  const revenueCentavos = pesoToCentavos(input.unitsSold * input.sellingPricePerUnitPesos);
+  const cashCollectedCentavos = pesoToCentavos(input.cashCollectedPesos);
+  const transactionDate = dateAtNoonUtc(input.date);
+  const inserted = await db.insert(separateInventoryTransactions).values({
+    recordCode: "pending",
+    transactionDate,
+    transactionType: "sale",
+    unitsDelta: -input.unitsSold,
+    costPerUnitCentavos,
+    sellingPriceCentavos,
+    revenueCentavos,
+    cashCollectedCentavos,
+    description: `Personal sale: ${input.unitsSold} units`,
+    notes: input.notes?.trim() || null,
+    createdBy: userId,
+    updatedBy: userId,
+  });
+  const id = Number((inserted as any)[0]?.insertId ?? (inserted as any).insertId);
+  const recordCode = makeRecordCode("personal-inventory", transactionDate, id);
+  await db.update(separateInventoryTransactions).set({ recordCode }).where(eq(separateInventoryTransactions.id, id));
+  await recordAudit(userId, "created", "separate_inventory", recordCode, "Recorded a personal inventory sale.");
+  return {
+    id,
+    recordCode,
+    unitsSold: input.unitsSold,
+    revenueCentavos,
+    grossProfitCentavos: revenueCentavos - input.unitsSold * costPerUnitCentavos,
+  };
+}
+
+export async function addSeparateInventoryAdjustment(
+  userId: number,
+  input: {
+    date: string;
+    type: "adjustment" | "loss" | "cash_adjustment";
+    unitsDelta: number;
+    cashDeltaPesos: number;
+    costPerUnitPesos: number;
+    description: string;
+    notes?: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const existing = await getSeparateInventoryData(userId);
+  if (input.unitsDelta < 0 && Math.abs(input.unitsDelta) > existing.currentUnits)
+    throw new Error(`The adjustment cannot remove more than ${existing.currentUnits} available units.`);
+  const transactionDate = dateAtNoonUtc(input.date);
+  const inserted = await db.insert(separateInventoryTransactions).values({
+    recordCode: "pending",
+    transactionDate,
+    transactionType: input.type,
+    unitsDelta: input.unitsDelta,
+    costPerUnitCentavos: pesoToCentavos(input.costPerUnitPesos),
+    cashCollectedCentavos: pesoToCentavos(input.cashDeltaPesos),
+    description: input.description.trim(),
+    notes: input.notes?.trim() || null,
+    createdBy: userId,
+    updatedBy: userId,
+  });
+  const id = Number((inserted as any)[0]?.insertId ?? (inserted as any).insertId);
+  const recordCode = makeRecordCode("personal-inventory", transactionDate, id);
+  await db.update(separateInventoryTransactions).set({ recordCode }).where(eq(separateInventoryTransactions.id, id));
+  await recordAudit(userId, "created", "separate_inventory", recordCode, `Recorded a personal ${input.type.replace("_", " ")}.`);
+  return { id, recordCode };
 }
 
 type DailyReportSummaryInput = typeof dailyReportSummaries.$inferInsert;
@@ -4002,6 +4190,7 @@ async function collectBusinessData() {
     profitLedgerRows,
     ruleRows,
     inventoryRows,
+    separateInventoryRows,
     paymentRows,
     capitalRows,
     expenseRows,
@@ -4026,6 +4215,7 @@ async function collectBusinessData() {
     db.select().from(profitLedgerEntries),
     db.select().from(ownershipRules),
     db.select().from(inventoryTransactions),
+    db.select().from(separateInventoryTransactions),
     db.select().from(payments),
     db.select().from(capitalTransactions),
     db.select().from(expenses),
@@ -4051,6 +4241,7 @@ async function collectBusinessData() {
     profit_ledger_entries: profitLedgerRows,
     ownership_rules: ruleRows,
     inventory_transactions: inventoryRows,
+    separate_inventory_transactions: separateInventoryRows,
     payments: paymentRows,
     capital_transactions: capitalRows,
     expenses: expenseRows,
@@ -4320,6 +4511,7 @@ export async function getDataResilienceOverview(userId: number) {
     capitalCountRows,
     expenseCountRows,
     closeCountRows,
+    separateInventoryCountRows,
   ] = await Promise.all([
     db
       .select()
@@ -4338,6 +4530,7 @@ export async function getDataResilienceOverview(userId: number) {
     db.select({ total: count() }).from(capitalTransactions),
     db.select({ total: count() }).from(expenses),
     db.select({ total: count() }).from(dailyClosings),
+    db.select({ total: count() }).from(separateInventoryTransactions),
   ]);
   const lastSuccessful =
     backupRows.find(
@@ -4354,6 +4547,7 @@ export async function getDataResilienceOverview(userId: number) {
     inventoryCountRows,
     capitalCountRows,
     expenseCountRows,
+    separateInventoryCountRows,
   ].reduce((total, rows) => total + Number(rows[0]?.total ?? 0), 0);
   return {
     lastSuccessfulBackupAt:
@@ -4372,6 +4566,7 @@ export async function getDataResilienceOverview(userId: number) {
       inventory: Number(inventoryCountRows[0]?.total ?? 0),
       capital: Number(capitalCountRows[0]?.total ?? 0),
       expenses: Number(expenseCountRows[0]?.total ?? 0),
+      separateInventory: Number(separateInventoryCountRows[0]?.total ?? 0),
       closings: Number(closeCountRows[0]?.total ?? 0),
     },
     retention: {

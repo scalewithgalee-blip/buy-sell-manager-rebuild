@@ -30,6 +30,10 @@ import {
   getTransitionReport,
   recordGaleTransitionWithdrawal,
   recordProfitDistribution,
+  addSeparateInventoryAdjustment,
+  addSeparateInventoryPurchase,
+  addSeparateInventorySale,
+  getSeparateInventoryData,
   reopenBusinessDay,
   runIntegrityCheck,
   saveBackupSchedule,
@@ -108,6 +112,52 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => getSalesHistory(ctx.user?.id ?? 0, input)),
+    separateInventory: publicAccessProcedure.query(({ ctx }) =>
+      getSeparateInventoryData(ctx.user?.id ?? 0)
+    ),
+    addSeparateInventoryPurchase: publicAccessProcedure
+      .input(
+        z.object({
+          date: day,
+          boxes: z.number().int().min(0).max(100_000),
+          extraUnits: z.number().int().min(0).max(10_000_000),
+          unitsPerBox: z.number().int().positive().max(100_000),
+          costPerBoxPesos: z.number().positive().max(10_000_000),
+          notes: z.string().max(2_000).optional(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        addSeparateInventoryPurchase(ctx.user?.id ?? 0, input)
+      ),
+    addSeparateInventorySale: publicAccessProcedure
+      .input(
+        z.object({
+          date: day,
+          unitsSold: z.number().int().positive().max(10_000_000),
+          costPerUnitPesos: z.number().positive().max(10_000_000),
+          sellingPricePerUnitPesos: z.number().positive().max(10_000_000),
+          cashCollectedPesos: z.number().nonnegative().max(10_000_000_000),
+          notes: z.string().max(2_000).optional(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        addSeparateInventorySale(ctx.user?.id ?? 0, input)
+      ),
+    addSeparateInventoryAdjustment: publicAccessProcedure
+      .input(
+        z.object({
+          date: day,
+          type: z.enum(["adjustment", "loss", "cash_adjustment"]),
+          unitsDelta: z.number().int().min(-10_000_000).max(10_000_000),
+          cashDeltaPesos: z.number().max(10_000_000_000),
+          costPerUnitPesos: z.number().nonnegative().max(10_000_000),
+          description: z.string().min(1).max(255),
+          notes: z.string().max(2_000).optional(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        addSeparateInventoryAdjustment(ctx.user?.id ?? 0, input)
+      ),
     addSale: publicAccessProcedure
       .input(
         z.object({

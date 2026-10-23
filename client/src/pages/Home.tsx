@@ -71,6 +71,7 @@ type View =
   | "dashboard"
   | "sales"
   | "inventory"
+  | "separateInventory"
   | "money"
   | "reports"
   | "settings"
@@ -79,6 +80,7 @@ const viewHash: Record<View, string> = {
   dashboard: "dashboard",
   sales: "sales",
   inventory: "inventory",
+  separateInventory: "separate-inventory",
   money: "money",
   reports: "reports",
   settings: "settings",
@@ -336,6 +338,7 @@ const nav: Array<{ key: View; label: string; icon: typeof LayoutDashboard }> = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "sales", label: "Sales", icon: ReceiptText },
   { key: "inventory", label: "Inventory", icon: Package },
+  { key: "separateInventory", label: "Separate Inventory", icon: Boxes },
   { key: "money", label: "Money", icon: Wallet },
   { key: "reports", label: "Reports", icon: BarChart3 },
   { key: "data", label: "Data & Backups", icon: DatabaseBackup },
@@ -661,6 +664,30 @@ export default function Home() {
     ownerId: "",
     notes: "",
   });
+  const [separatePurchase, setSeparatePurchase] = useState({
+    date: today(),
+    boxes: "",
+    extraUnits: "",
+    costPerBox: "",
+    notes: "",
+  });
+  const [separateSale, setSeparateSale] = useState({
+    date: today(),
+    unitsSold: "",
+    costPerUnit: "700",
+    sellingPricePerUnit: "730",
+    cashCollected: "",
+    notes: "",
+  });
+  const [separateAdjustment, setSeparateAdjustment] = useState({
+    date: today(),
+    type: "adjustment" as "adjustment" | "loss" | "cash_adjustment",
+    unitsDelta: "",
+    cashDelta: "",
+    costPerUnit: "700",
+    description: "",
+    notes: "",
+  });
   const [capital, setCapital] = useState({
     date: today(),
     amount: "",
@@ -714,6 +741,10 @@ export default function Home() {
   const setupQuery = trpc.business.setup.useQuery(undefined, {
     enabled: accessUnlocked,
   });
+  const separateInventoryQuery = trpc.business.separateInventory.useQuery(
+    undefined,
+    { enabled: accessUnlocked }
+  );
   const profitLedgerQuery = trpc.business.profitLedger.useQuery(undefined, {
     enabled: accessUnlocked,
   });
@@ -786,6 +817,19 @@ export default function Home() {
     ? dashboard.weeklyCapitalPositionHistory
     : [];
   const setup = setupQuery.data;
+  const separateInventory = (separateInventoryQuery.data ?? {
+    rows: [],
+    unitsPerBox: dashboard.settings.unitsPerBox,
+    currentUnits: 0,
+    currentBoxes: 0,
+    inventoryValueCentavos: 0,
+    totalPurchasedUnits: 0,
+    totalSoldUnits: 0,
+    salesRevenueCentavos: 0,
+    salesCogsCentavos: 0,
+    grossProfitCentavos: 0,
+    cashBalanceCentavos: 0,
+  }) as any;
   const resilience = resilienceQuery.data as any;
   const restorePreview = restorePreviewQuery.data as any;
   const history = historyQuery.data as any;
@@ -930,6 +974,55 @@ export default function Home() {
     },
     onError: error => toast.error(error.message),
   });
+  const addSeparatePurchase =
+    trpc.business.addSeparateInventoryPurchase.useMutation({
+      onSuccess: result => {
+        toast.success(
+          `Separate inventory purchase saved: ${number(result.unitsAdded)} units added.`
+        );
+        setSeparatePurchase({
+          date: today(),
+          boxes: "",
+          extraUnits: "",
+          costPerBox: "",
+          notes: "",
+        });
+        utils.business.separateInventory.invalidate();
+      },
+      onError: error => toast.error(error.message),
+    });
+  const addSeparateSale = trpc.business.addSeparateInventorySale.useMutation({
+    onSuccess: result => {
+      toast.success(
+        `Separate sale saved: ${peso(result.grossProfitCentavos)} gross profit.`
+      );
+      setSeparateSale(current => ({
+        ...current,
+        date: today(),
+        unitsSold: "",
+        cashCollected: "",
+        notes: "",
+      }));
+      utils.business.separateInventory.invalidate();
+    },
+    onError: error => toast.error(error.message),
+  });
+  const addSeparateAdjustment =
+    trpc.business.addSeparateInventoryAdjustment.useMutation({
+      onSuccess: () => {
+        toast.success("Separate inventory adjustment saved.");
+        setSeparateAdjustment(current => ({
+          ...current,
+          date: today(),
+          unitsDelta: "",
+          cashDelta: "",
+          description: "",
+          notes: "",
+        }));
+        utils.business.separateInventory.invalidate();
+      },
+      onError: error => toast.error(error.message),
+    });
   const updateSettings = trpc.business.updateSettings.useMutation({
     onSuccess: () => {
       toast.success(
@@ -1206,7 +1299,7 @@ export default function Home() {
     {
       label: "Operations",
       items: nav.filter(item =>
-        ["sales", "inventory", "money", "transition"].includes(item.key)
+        ["sales", "inventory", "separateInventory", "money", "transition"].includes(item.key)
       ),
     },
     { label: "Analytics", items: nav.filter(item => item.key === "reports") },
@@ -3745,10 +3838,469 @@ export default function Home() {
     </>
   );
 
+  const separateInventoryView = (
+    <>
+      <SectionHeading
+        eyebrow="Personal ledger"
+        title="Separate Inventory"
+        info="This ledger is exclusively yours. It is intentionally excluded from shared inventory, owner capital, Nikki’s percentage, Next Box Fund, shared profit, and reconciliation warnings."
+        copy="Track boxes you buy and sell under your name without mixing them into the shared business records."
+        action={
+          <span className="inline-flex items-center gap-2 rounded-full bg-[#f0efff] px-3 py-2 text-xs font-semibold text-[#5b4de1]">
+            <ShieldCheck className="h-3.5 w-3.5" /> Excluded from shared ledger
+          </span>
+        }
+      />
+      <div className="grid gap-3 md:grid-cols-4">
+        <MetricCard
+          label="Personal inventory"
+          value={`${number(separateInventory.currentUnits)} units`}
+          hint={`${number(separateInventory.currentBoxes, 2)} box equivalent`}
+          tone="navy"
+          icon={Package}
+        />
+        <MetricCard
+          label="Inventory at cost"
+          value={peso(separateInventory.inventoryValueCentavos)}
+          hint={`${number(separateInventory.unitsPerBox)} units per box`}
+          tone="amber"
+          icon={Banknote}
+        />
+        <MetricCard
+          label="Personal cash balance"
+          value={peso(separateInventory.cashBalanceCentavos)}
+          hint="Purchases, sales, and cash adjustments"
+          tone="teal"
+          icon={Wallet}
+        />
+        <MetricCard
+          label="Gross profit"
+          value={peso(separateInventory.grossProfitCentavos)}
+          hint={`${number(separateInventory.totalSoldUnits)} units sold`}
+          tone="coral"
+          icon={ReceiptText}
+        />
+      </div>
+      <div className="mt-5 rounded-2xl border border-[#ded9ff] bg-[#faf9ff] p-4 text-sm text-[#4f477f]">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#6d5dfc]" />
+          <div>
+            <p className="font-semibold">Private ownership boundary</p>
+            <p className="mt-1 leading-5 text-[#716b97]">
+              Entries here belong to you only. They will not change the shared
+              business’s inventory count, ₱210,000 capital position, Next Box
+              Fund, Nikki’s allocation, or shared reports.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+        <form
+          className="panel p-5"
+          onSubmit={event => {
+            event.preventDefault();
+            const boxes = Number(separatePurchase.boxes) || 0;
+            const extraUnits = Number(separatePurchase.extraUnits) || 0;
+            const costPerBox = Number(
+              separatePurchase.costPerBox || dashboard.settings.boxCostCentavos / 100
+            );
+            if (boxes <= 0 && extraUnits <= 0)
+              return toast.error("Enter at least one box or extra unit.");
+            addSeparatePurchase.mutate({
+              date: separatePurchase.date,
+              boxes,
+              extraUnits,
+              unitsPerBox: separateInventory.unitsPerBox,
+              costPerBoxPesos: costPerBox,
+              notes: separatePurchase.notes || undefined,
+            });
+          }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
+            Add stock
+          </p>
+          <h3 className="mt-1 text-xl font-semibold text-[#17182b]">
+            Personal purchase
+          </h3>
+          <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
+            Record boxes bought with your own money. This creates personal
+            inventory and reduces the personal cash balance only.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Purchase date</Label>
+              <input
+                required
+                type="date"
+                value={separatePurchase.date}
+                onChange={event =>
+                  setSeparatePurchase({ ...separatePurchase, date: event.target.value })
+                }
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Boxes purchased</Label>
+              <input
+                min="0"
+                step="1"
+                type="number"
+                value={separatePurchase.boxes}
+                onChange={event =>
+                  setSeparatePurchase({ ...separatePurchase, boxes: event.target.value })
+                }
+                placeholder="1"
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Extra units / reams</Label>
+              <input
+                min="0"
+                step="1"
+                type="number"
+                value={separatePurchase.extraUnits}
+                onChange={event =>
+                  setSeparatePurchase({ ...separatePurchase, extraUnits: event.target.value })
+                }
+                placeholder="0"
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Cost per box (₱)</Label>
+              <input
+                min="0.01"
+                step="0.01"
+                type="number"
+                value={
+                  separatePurchase.costPerBox || String(dashboard.settings.boxCostCentavos / 100)
+                }
+                onChange={event =>
+                  setSeparatePurchase({ ...separatePurchase, costPerBox: event.target.value })
+                }
+                className="field mt-1"
+              />
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-[#f0efff] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
+                Units added
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#5b4de1]">
+                {number(
+                  (Number(separatePurchase.boxes) || 0) * separateInventory.unitsPerBox +
+                    (Number(separatePurchase.extraUnits) || 0)
+                )}
+              </p>
+            </div>
+            <div className="rounded-lg bg-[#f7f7fb] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
+                Personal cash used
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#17182b]">
+                {peso(
+                  Math.round(
+                    ((Number(separatePurchase.boxes) || 0) +
+                      (Number(separatePurchase.extraUnits) || 0) /
+                        separateInventory.unitsPerBox) *
+                      Number(separatePurchase.costPerBox || dashboard.settings.boxCostCentavos / 100) *
+                      100
+                  )
+                )}
+              </p>
+            </div>
+          </div>
+          <Label>Notes</Label>
+          <textarea
+            value={separatePurchase.notes}
+            onChange={event =>
+              setSeparatePurchase({ ...separatePurchase, notes: event.target.value })
+            }
+            placeholder="Supplier, payment method, or ownership note"
+            className="field mt-1 min-h-[70px] resize-none"
+          />
+          <button
+            disabled={addSeparatePurchase.isPending}
+            className="btn-primary mt-4 w-full justify-center"
+          >
+            {addSeparatePurchase.isPending ? "Saving…" : "Save personal purchase"}
+          </button>
+        </form>
+        <form
+          className="panel p-5"
+          onSubmit={event => {
+            event.preventDefault();
+            const unitsSold = Number(separateSale.unitsSold);
+            const price = Number(separateSale.sellingPricePerUnit);
+            if (!Number.isInteger(unitsSold) || unitsSold <= 0)
+              return toast.error("Enter whole units sold.");
+            addSeparateSale.mutate({
+              date: separateSale.date,
+              unitsSold,
+              costPerUnitPesos: Number(separateSale.costPerUnit),
+              sellingPricePerUnitPesos: price,
+              cashCollectedPesos:
+                separateSale.cashCollected === ""
+                  ? unitsSold * price
+                  : Number(separateSale.cashCollected),
+              notes: separateSale.notes || undefined,
+            });
+          }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
+            Record revenue
+          </p>
+          <h3 className="mt-1 text-xl font-semibold text-[#17182b]">
+            Personal sale
+          </h3>
+          <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
+            Sales reduce only your separate inventory and add to your personal
+            cash and profit totals.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Sale date</Label>
+              <input
+                required
+                type="date"
+                value={separateSale.date}
+                onChange={event => setSeparateSale({ ...separateSale, date: event.target.value })}
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Units / reams sold</Label>
+              <input
+                required
+                min="1"
+                step="1"
+                type="number"
+                value={separateSale.unitsSold}
+                onChange={event => setSeparateSale({ ...separateSale, unitsSold: event.target.value })}
+                placeholder="10"
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Cost per unit (₱)</Label>
+              <input
+                required
+                min="0.01"
+                step="0.01"
+                type="number"
+                value={separateSale.costPerUnit}
+                onChange={event => setSeparateSale({ ...separateSale, costPerUnit: event.target.value })}
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Selling price / unit (₱)</Label>
+              <input
+                required
+                min="0.01"
+                step="0.01"
+                type="number"
+                value={separateSale.sellingPricePerUnit}
+                onChange={event => setSeparateSale({ ...separateSale, sellingPricePerUnit: event.target.value })}
+                className="field mt-1"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label info="Leave blank for full payment. Enter a lower amount only when you want the personal cash balance to reflect a partial collection.">
+                Cash collected (₱)
+              </Label>
+              <input
+                min="0"
+                step="0.01"
+                type="number"
+                value={separateSale.cashCollected}
+                onChange={event => setSeparateSale({ ...separateSale, cashCollected: event.target.value })}
+                placeholder="Auto-calculated from units × selling price"
+                className="field mt-1"
+              />
+            </div>
+          </div>
+          <div className="mt-3 rounded-lg bg-[#f0efff] p-3 text-sm text-[#5b4de1]">
+            Expected revenue: <strong>{peso((Number(separateSale.unitsSold) || 0) * (Number(separateSale.sellingPricePerUnit) || 0) * 100)}</strong>
+            <span className="mx-2">·</span>
+            Gross profit: <strong>{peso((Number(separateSale.unitsSold) || 0) * ((Number(separateSale.sellingPricePerUnit) || 0) - (Number(separateSale.costPerUnit) || 0)) * 100)}</strong>
+          </div>
+          <Label>Notes</Label>
+          <textarea
+            value={separateSale.notes}
+            onChange={event => setSeparateSale({ ...separateSale, notes: event.target.value })}
+            placeholder="Customer or collection note"
+            className="field mt-1 min-h-[70px] resize-none"
+          />
+          <button disabled={addSeparateSale.isPending} className="btn-primary mt-4 w-full justify-center">
+            {addSeparateSale.isPending ? "Saving…" : "Save personal sale"}
+          </button>
+        </form>
+      </div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
+        <form
+          className="panel p-5"
+          onSubmit={event => {
+            event.preventDefault();
+            const unitsDelta = Number(separateAdjustment.unitsDelta) || 0;
+            const cashDelta = Number(separateAdjustment.cashDelta) || 0;
+            if (separateAdjustment.type !== "cash_adjustment" && unitsDelta === 0)
+              return toast.error("Enter a non-zero unit adjustment.");
+            if (separateAdjustment.type === "cash_adjustment" && cashDelta === 0)
+              return toast.error("Enter a non-zero cash adjustment.");
+            if (!separateAdjustment.description.trim())
+              return toast.error("Describe the adjustment for the audit trail.");
+            addSeparateAdjustment.mutate({
+              date: separateAdjustment.date,
+              type: separateAdjustment.type,
+              unitsDelta: separateAdjustment.type === "cash_adjustment" ? 0 : unitsDelta,
+              cashDeltaPesos: separateAdjustment.type === "cash_adjustment" ? cashDelta : 0,
+              costPerUnitPesos: Number(separateAdjustment.costPerUnit) || 0,
+              description: separateAdjustment.description,
+              notes: separateAdjustment.notes || undefined,
+            });
+          }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
+            Corrections
+          </p>
+          <h3 className="mt-1 text-xl font-semibold text-[#17182b]">
+            Stock or cash adjustment
+          </h3>
+          <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
+            Use an adjustment instead of rewriting history when your physical
+            count or personal cash needs reconciliation.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Date</Label>
+              <input
+                required
+                type="date"
+                value={separateAdjustment.date}
+                onChange={event => setSeparateAdjustment({ ...separateAdjustment, date: event.target.value })}
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Adjustment type</Label>
+              <select
+                value={separateAdjustment.type}
+                onChange={event => setSeparateAdjustment({ ...separateAdjustment, type: event.target.value as typeof separateAdjustment.type })}
+                className="field mt-1"
+              >
+                <option value="adjustment">Inventory count adjustment</option>
+                <option value="loss">Personal inventory loss</option>
+                <option value="cash_adjustment">Personal cash adjustment</option>
+              </select>
+            </div>
+            <div>
+              <Label>Unit change</Label>
+              <input
+                min="-10000000"
+                step="1"
+                type="number"
+                disabled={separateAdjustment.type === "cash_adjustment"}
+                value={separateAdjustment.unitsDelta}
+                onChange={event => setSeparateAdjustment({ ...separateAdjustment, unitsDelta: event.target.value })}
+                placeholder="+50 or −5"
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Cash change (₱)</Label>
+              <input
+                step="0.01"
+                type="number"
+                disabled={separateAdjustment.type !== "cash_adjustment"}
+                value={separateAdjustment.cashDelta}
+                onChange={event => setSeparateAdjustment({ ...separateAdjustment, cashDelta: event.target.value })}
+                placeholder="+1000 or −500"
+                className="field mt-1"
+              />
+            </div>
+          </div>
+          <div className="mt-3">
+            <Label>Reason / description</Label>
+            <input
+              required
+              value={separateAdjustment.description}
+              onChange={event => setSeparateAdjustment({ ...separateAdjustment, description: event.target.value })}
+              placeholder="Physical count confirmed"
+              className="field mt-1"
+            />
+          </div>
+          <Label>Notes</Label>
+          <textarea
+            value={separateAdjustment.notes}
+            onChange={event => setSeparateAdjustment({ ...separateAdjustment, notes: event.target.value })}
+            placeholder="What was checked and by whom"
+            className="field mt-1 min-h-[70px] resize-none"
+          />
+          <button disabled={addSeparateAdjustment.isPending} className="btn-secondary mt-4 w-full justify-center">
+            {addSeparateAdjustment.isPending ? "Saving…" : "Save adjustment"}
+          </button>
+        </form>
+        <section className="panel overflow-hidden">
+          <div className="border-b border-[#eeeef4] px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
+              Personal audit trail
+            </p>
+            <h3 className="mt-1 text-lg font-semibold text-[#17182b]">
+              Purchases, sales, and corrections
+            </h3>
+          </div>
+          {separateInventory.rows.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="bg-[#faf9ff] text-[10px] uppercase tracking-[.12em] text-[#8d90a2]">
+                  <tr>
+                    <th className="px-5 py-3 font-bold">Date</th>
+                    <th className="px-5 py-3 font-bold">Entry</th>
+                    <th className="px-5 py-3 text-right font-bold">Units</th>
+                    <th className="px-5 py-3 text-right font-bold">Cash</th>
+                    <th className="px-5 py-3 text-right font-bold">Profit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#f0f0f5]">
+                  {separateInventory.rows.map((row: any) => {
+                    const profit = row.revenueCentavos - Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos;
+                    return (
+                      <tr key={row.id} className="text-[#64687b]">
+                        <td className="whitespace-nowrap px-5 py-3">{prettyDate(row.transactionDate)}</td>
+                        <td className="px-5 py-3">
+                          <p className="font-semibold capitalize text-[#17182b]">{row.transactionType.replace("_", " ")}</p>
+                          <p className="max-w-[260px] truncate text-xs text-[#9699aa]" title={row.description}>{row.description}</p>
+                          <p className="text-[10px] text-[#aaaabd]">{row.recordCode}</p>
+                        </td>
+                        <td className={`px-5 py-3 text-right font-semibold ${row.unitsDelta < 0 ? "text-[#9d3f35]" : "text-[#5b4de1]"}`}>{row.unitsDelta > 0 ? "+" : ""}{number(row.unitsDelta)}</td>
+                        <td className={`px-5 py-3 text-right font-semibold ${row.cashCollectedCentavos < 0 ? "text-[#9d3f35]" : "text-[#5b4de1]"}`}>{row.cashCollectedCentavos > 0 ? "+" : ""}{peso(row.cashCollectedCentavos)}</td>
+                        <td className="px-5 py-3 text-right font-semibold text-[#5b4de1]">{profit ? peso(profit) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-8 text-center">
+              <Package className="mx-auto h-9 w-9 text-[#c3c0e8]" />
+              <p className="mt-3 font-semibold text-[#17182b]">No personal entries yet</p>
+              <p className="mt-1 text-sm text-[#8d90a2]">Start with your current personal stock purchase or enter a physical count adjustment.</p>
+            </div>
+          )}
+        </section>
+      </div>
+    </>
+  );
+
   const views: Record<View, React.ReactNode> = {
     dashboard: dashboardView,
     sales: salesView,
     inventory: inventoryView,
+    separateInventory: separateInventoryView,
     money: moneyView,
     reports: reportsView,
     data: dataView,
