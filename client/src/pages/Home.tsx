@@ -2671,14 +2671,6 @@ export default function Home() {
                       · {day.totalUnitsDelta >= 0 ? "+" : ""}{day.totalUnitsDelta} units that day
                     </p>
                   </div>
-                  <div className="shrink-0 text-right text-xs">
-                    <p className={day.fundMovementCentavos < 0 ? "text-[#9d3f35]" : "text-[#287c65]"}>
-                      {signedPeso(day.fundMovementCentavos)} fund movement
-                    </p>
-                    <p className="mt-0.5 font-semibold text-[#5b4de1]">
-                      Fund after day: {peso(day.closingBalanceCentavos)}
-                    </p>
-                  </div>
                 </div>
                 <div className="mt-3 space-y-3 border-l-2 border-[#e2defe] pl-3">
                   {day.transactions.map((item: any) => (
