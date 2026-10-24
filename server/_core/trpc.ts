@@ -2,7 +2,7 @@ import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
-import { hasPublicAccess } from "../publicAccess";
+import { getPublicAccessRole } from "../publicAccess";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -31,8 +31,15 @@ export const protectedProcedure = t.procedure.use(requireUser);
 const requirePublicAccess = t.middleware(async opts => {
   const { ctx, next } = opts;
 
-  if (!ctx.user && !hasPublicAccess(ctx.req)) {
+  const accessRole = ctx.user ? "admin" : getPublicAccessRole(ctx.req);
+  if (!accessRole) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }
+  if (!ctx.user && accessRole === "viewer" && opts.type === "mutation") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Viewer access is read-only. Enter the admin PIN to make changes.",
+    });
   }
 
   return next({ ctx });

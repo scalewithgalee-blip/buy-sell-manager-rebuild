@@ -7,9 +7,11 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicAccessProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   createPublicAccessToken,
+  ADMIN_ACCESS_PIN,
+  VIEWER_ACCESS_PIN,
+  getPublicAccessRole,
   hasPublicAccess,
   PUBLIC_ACCESS_COOKIE,
-  PUBLIC_ACCESS_PIN,
   publicAccessCookieMaxAge,
 } from "./publicAccess";
 import {
@@ -60,21 +62,28 @@ export const appRouter = router({
   access: router({
     status: publicProcedure.query(({ ctx }) => ({
       unlocked: Boolean(ctx.user) || hasPublicAccess(ctx.req),
+      role: ctx.user ? "admin" : getPublicAccessRole(ctx.req),
     })),
     unlock: publicProcedure
       .input(z.object({ pin: z.string().length(4) }))
       .mutation(({ ctx, input }) => {
-        if (input.pin !== PUBLIC_ACCESS_PIN)
+        const role =
+          input.pin === ADMIN_ACCESS_PIN
+            ? "admin"
+            : input.pin === VIEWER_ACCESS_PIN
+              ? "viewer"
+              : null;
+        if (!role)
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Incorrect access PIN.",
           });
         const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(PUBLIC_ACCESS_COOKIE, createPublicAccessToken(), {
+        ctx.res.cookie(PUBLIC_ACCESS_COOKIE, createPublicAccessToken(role), {
           ...cookieOptions,
           maxAge: publicAccessCookieMaxAge,
         });
-        return { success: true } as const;
+        return { success: true, role } as const;
       }),
     lock: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);

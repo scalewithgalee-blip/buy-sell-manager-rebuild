@@ -745,6 +745,10 @@ export default function Home() {
   const utils = trpc.useUtils();
   const accessQuery = trpc.access.status.useQuery();
   const accessUnlocked = accessQuery.data?.unlocked === true;
+  const accessRole =
+    accessQuery.data?.role ?? (isAuthenticated ? "admin" : null);
+  const canEdit = isAuthenticated || accessRole === "admin";
+  const isViewerAccess = accessRole === "viewer" && !isAuthenticated;
   const dashboardQuery = trpc.business.dashboard.useQuery(undefined, {
     enabled: accessUnlocked,
   });
@@ -1411,18 +1415,35 @@ export default function Home() {
     });
   };
 
+  const viewerViews: View[] = [
+    "dashboard",
+    "sales",
+    "inventory",
+    "money",
+    "reports",
+  ];
+  useEffect(() => {
+    if (isViewerAccess && !viewerViews.includes(view)) {
+      setView("dashboard");
+      window.location.hash = viewHash.dashboard;
+    }
+  }, [isViewerAccess, view]);
+  const visibleNav = canEdit
+    ? nav
+    : nav.filter(item => viewerViews.includes(item.key));
+
   const navGroups = [
-    { label: "Overview", items: nav.filter(item => item.key === "dashboard") },
+    { label: "Overview", items: visibleNav.filter(item => item.key === "dashboard") },
     {
       label: "Operations",
-      items: nav.filter(item =>
+      items: visibleNav.filter(item =>
         ["sales", "inventory", "separateInventory", "money", "transition"].includes(item.key)
       ),
     },
-    { label: "Analytics", items: nav.filter(item => item.key === "reports") },
+    { label: "Analytics", items: visibleNav.filter(item => item.key === "reports") },
     {
       label: "System",
-      items: nav.filter(item => ["data", "settings"].includes(item.key)),
+      items: visibleNav.filter(item => ["data", "settings"].includes(item.key)),
     },
   ];
   const sidebar = (
@@ -1518,6 +1539,11 @@ export default function Home() {
         info="This dashboard summarizes the live ledger. Changes made from any screen are recorded in the audit trail."
         copy={`${new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} • Shared business ledger`}
         action={
+          !canEdit ? (
+            <span className="rounded-lg bg-[#f7f7fb] px-3 py-2 text-xs font-semibold text-[#8d90a2]">
+              Viewer access · read-only
+            </span>
+          ) : (
           <div className="flex flex-wrap gap-2">
             <button onClick={() => handleNav("sales")} className="btn-primary">
               <Plus className="h-4 w-4" /> Add daily sale
@@ -1551,6 +1577,7 @@ export default function Home() {
               </button>
             )}
           </div>
+          )
         }
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -2160,7 +2187,11 @@ export default function Home() {
         copy="Enter the date and packs/reams sold. Auto-calculate expected cash and gross earnings, or turn it off to enter a manual cash variance."
       />
       <div className="grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
-        <form onSubmit={submitSale} className="panel p-5">
+        <form
+          onSubmit={submitSale}
+          className={`panel p-5 ${canEdit ? "" : "hidden"}`}
+          aria-hidden={!canEdit}
+        >
           <div className="mb-5 rounded-lg border border-[#e2defe] bg-[#f3f1ff] px-3 py-2.5 text-sm text-[#5b4de1]">
             <Zap className="mr-2 inline h-4 w-4" />
             Cash-only sale. Each pack/ream is ₱700 cost + ₱30 profit = ₱730 cash
@@ -2484,7 +2515,8 @@ export default function Home() {
               notes: inventoryPurchase.notes || undefined,
             });
           }}
-          className="panel p-5"
+          className={`panel p-5 ${canEdit ? "" : "hidden"}`}
+          aria-hidden={!canEdit}
         >
           <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
             Inventory purchase
@@ -2855,7 +2887,8 @@ export default function Home() {
               notes: profitSettlement.notes || undefined,
             });
           }}
-          className="panel p-5"
+          className={`panel p-5 ${canEdit ? "" : "hidden"}`}
+          aria-hidden={!canEdit}
         >
           <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
             Profit settlement
@@ -4684,6 +4717,11 @@ export default function Home() {
                   <Sun className="h-4 w-4" />
                 )}
               </button>
+              {isViewerAccess && (
+                <span className="hidden rounded-lg bg-[#fff8e7] px-3 py-2 text-xs font-semibold text-[#9a6a00] xl:inline">
+                  Viewer · read-only
+                </span>
+              )}
               <AlertCenter
                 alerts={businessAlerts}
                 onOpenReports={() => handleNav("reports")}
@@ -4717,6 +4755,11 @@ export default function Home() {
             <span className="text-sm font-bold text-[#17182b]">Buy & Sell</span>
           </div>
           <div className="flex items-center gap-2">
+            {isViewerAccess && (
+              <span className="rounded-lg bg-[#fff8e7] px-2 py-1 text-[10px] font-semibold text-[#9a6a00]">
+                Viewer
+              </span>
+            )}
             <AlertCenter
               alerts={businessAlerts}
               onOpenReports={() => handleNav("reports")}
@@ -4965,9 +5008,13 @@ function PublicAccessScreen({ onUnlocked }: { onUnlocked: () => void }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const unlock = trpc.access.unlock.useMutation({
-    onSuccess: () => {
+    onSuccess: result => {
       setError("");
-      toast.success("Access granted.");
+      toast.success(
+        result.role === "viewer"
+          ? "Viewer access granted — read-only mode."
+          : "Admin access granted."
+      );
       onUnlocked();
     },
     onError: error => setError(error.message),
@@ -4984,8 +5031,8 @@ function PublicAccessScreen({ onUnlocked }: { onUnlocked: () => void }) {
         </p>
         <h1 className="mt-2 text-2xl font-semibold">Enter access PIN</h1>
         <p className="mt-2 text-sm leading-6 text-[#8d90a2]">
-          This business ledger is available to authorized visitors with the
-          shared access PIN.
+          Enter the admin PIN for full access or the viewer PIN for read-only
+          dashboards and history.
         </p>
         <form
           className="mt-6 space-y-3"

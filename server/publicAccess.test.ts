@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createPublicAccessToken, isValidPublicAccessToken } from "./publicAccess";
+import {
+  createPublicAccessToken,
+  getPublicAccessRoleFromToken,
+  isValidPublicAccessToken,
+} from "./publicAccess";
 
 describe("public PIN access", () => {
   it("accepts a freshly issued signed token", () => {
@@ -12,5 +16,15 @@ describe("public PIN access", () => {
     const token = createPublicAccessToken(issuedAt);
     expect(isValidPublicAccessToken(token, Date.now())).toBe(false);
     expect(isValidPublicAccessToken(`${Date.now()}.tampered`, Date.now())).toBe(false);
+  });
+
+  it("preserves admin and viewer roles in signed tokens", () => {
+    const issuedAt = Date.now();
+    const adminToken = createPublicAccessToken("admin", issuedAt);
+    const viewerToken = createPublicAccessToken("viewer", issuedAt);
+
+    expect(getPublicAccessRoleFromToken(adminToken, issuedAt + 1_000)).toBe("admin");
+    expect(getPublicAccessRoleFromToken(viewerToken, issuedAt + 1_000)).toBe("viewer");
+    expect(getPublicAccessRoleFromToken(adminToken.replace("admin", "viewer"), issuedAt + 1_000)).toBeNull();
   });
 });
