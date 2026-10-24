@@ -1953,13 +1953,7 @@ export async function ensureBusinessSetup(userId: number | null = null) {
 async function initializeBusinessSetup(userId: number | null = null) {
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
-  let existing;
-  try {
-    existing = await db.select().from(businessSettings).limit(1);
-  } catch (error) {
-    console.error("[Database] Failed to read business settings during setup:", error);
-    throw error;
-  }
+  const existing = await db.select().from(businessSettings).limit(1);
   if (existing[0]) {
     await backfillTransactionCodes();
     await ensureDailyProfitSplit(userId);
