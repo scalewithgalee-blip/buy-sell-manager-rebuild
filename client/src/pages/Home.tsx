@@ -2714,7 +2714,7 @@ export default function Home() {
                           {item.unitsDelta} units
                         </span>
                         <p className={item.fundImpactCentavos < 0 ? "mt-1 text-[10px] text-[#9d3f35]" : "mt-1 text-[10px] text-[#287c65]"}>
-                          {signedPeso(item.fundImpactCentavos)} fund movement
+                          {signedPeso(item.fundImpactCentavos)} {item.fundImpactCentavos > 0 ? "sales today" : "fund movement"}
                         </p>
                         <p className="text-[10px] font-semibold text-[#5b4de1]">
                           Left: {peso(item.runningBalanceCentavos)}
