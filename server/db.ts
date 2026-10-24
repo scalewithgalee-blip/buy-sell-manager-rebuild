@@ -1936,10 +1936,30 @@ async function backfillTransactionCodes() {
 }
 
 /** Seeds only immutable opening records; it never modifies existing financial history. */
+let ensureBusinessSetupInFlight: Promise<void> | null = null;
+
 export async function ensureBusinessSetup(userId: number | null = null) {
+  if (ensureBusinessSetupInFlight) return ensureBusinessSetupInFlight;
+  const setupPromise = initializeBusinessSetup(userId);
+  ensureBusinessSetupInFlight = setupPromise;
+  try {
+    await setupPromise;
+  } finally {
+    if (ensureBusinessSetupInFlight === setupPromise)
+      ensureBusinessSetupInFlight = null;
+  }
+}
+
+async function initializeBusinessSetup(userId: number | null = null) {
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
-  const existing = await db.select().from(businessSettings).limit(1);
+  let existing;
+  try {
+    existing = await db.select().from(businessSettings).limit(1);
+  } catch (error) {
+    console.error("[Database] Failed to read business settings during setup:", error);
+    throw error;
+  }
   if (existing[0]) {
     await backfillTransactionCodes();
     await ensureDailyProfitSplit(userId);

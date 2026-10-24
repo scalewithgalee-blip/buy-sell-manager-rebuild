@@ -10,6 +10,7 @@ import {
   ADMIN_ACCESS_PIN,
   VIEWER_ACCESS_PIN,
   getPublicAccessRole,
+  getPublicAccessCookieOptions,
   hasPublicAccess,
   PUBLIC_ACCESS_COOKIE,
   publicAccessCookieMaxAge,
@@ -78,7 +79,7 @@ export const appRouter = router({
             code: "UNAUTHORIZED",
             message: "Incorrect access PIN.",
           });
-        const cookieOptions = getSessionCookieOptions(ctx.req);
+        const cookieOptions = getPublicAccessCookieOptions(ctx.req);
         ctx.res.cookie(PUBLIC_ACCESS_COOKIE, createPublicAccessToken(role), {
           ...cookieOptions,
           maxAge: publicAccessCookieMaxAge,
@@ -86,7 +87,7 @@ export const appRouter = router({
         return { success: true, role } as const;
       }),
     lock: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
+      const cookieOptions = getPublicAccessCookieOptions(ctx.req);
       ctx.res.clearCookie(PUBLIC_ACCESS_COOKIE, {
         ...cookieOptions,
         maxAge: -1,

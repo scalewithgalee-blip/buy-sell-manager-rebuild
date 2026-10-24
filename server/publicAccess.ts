@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
 import { parse as parseCookie } from "cookie";
 import { ENV } from "./_core/env";
+import { getSessionCookieOptions } from "./_core/cookies";
 
 export const PUBLIC_ACCESS_COOKIE = "buy_sell_public_access";
 export type PublicAccessRole = "admin" | "viewer";
@@ -74,3 +75,10 @@ export function hasPublicAccess(req: Request) {
 }
 
 export const publicAccessCookieMaxAge = ACCESS_TTL_MS;
+
+export function getPublicAccessCookieOptions(req: Request) {
+  return {
+    ...getSessionCookieOptions(req),
+    sameSite: "lax" as const,
+  };
+}
