@@ -1354,6 +1354,19 @@ export default function Home() {
     monthlyProfitGoalReached,
     monthlyGoalToastShown,
   ]);
+  const viewerViews: View[] = [
+    "dashboard",
+    "sales",
+    "inventory",
+    "money",
+    "reports",
+  ];
+  useEffect(() => {
+    if (isViewerAccess && !viewerViews.includes(view)) {
+      setView("dashboard");
+      window.location.hash = viewHash.dashboard;
+    }
+  }, [isViewerAccess, view]);
   const weeklyComparisonLabel =
     weeklyComparison.previousUnitsSold === 0
       ? weeklyComparison.currentUnitsSold === 0
@@ -1415,19 +1428,6 @@ export default function Home() {
     });
   };
 
-  const viewerViews: View[] = [
-    "dashboard",
-    "sales",
-    "inventory",
-    "money",
-    "reports",
-  ];
-  useEffect(() => {
-    if (isViewerAccess && !viewerViews.includes(view)) {
-      setView("dashboard");
-      window.location.hash = viewHash.dashboard;
-    }
-  }, [isViewerAccess, view]);
   const visibleNav = canEdit
     ? nav
     : nav.filter(item => viewerViews.includes(item.key));
