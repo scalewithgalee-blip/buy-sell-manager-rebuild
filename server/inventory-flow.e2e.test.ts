@@ -4,7 +4,7 @@ import {
   calculateCurrentNextBoxFundBalance,
   calculateInventoryPurchase,
   calculateNextBoxFundBalance,
-  calculateNextBoxFundTransactionTrace,
+  calculateCapitalBalancedInventoryTrace,
   calculateTodayNextBoxFundBalance,
 } from "./db";
 
@@ -185,31 +185,33 @@ describe("inventory funding flow: sale to replacement purchase", () => {
     expect(result.availableCentavos).toBe(1_540_000);
   });
 
-  it("shows recovered COGS, replacement deductions, and the remaining balance per inventory transaction", () => {
-    const trace = calculateNextBoxFundTransactionTrace({
-      sales: [
-        {
-          id: 1,
-          saleDate: new Date("2026-10-01T12:00:00.000Z"),
-          createdAt: "2026-10-01 09:00:00",
-          cogsCentavos: 5_040_000,
-          isVoided: false,
-        },
-      ],
+  it("shows capital-balanced fund history after every inventory transaction", () => {
+    const trace = calculateCapitalBalancedInventoryTrace({
+      ownerCapitalCentavos: 21_000_000,
+      costPerUnitCentavos: 70_000,
       inventory: [
         {
-          id: 10,
+          id: 1,
           transactionDate: new Date("2026-10-01T12:00:00.000Z"),
-          createdAt: "2026-10-01 09:00:01",
+          createdAt: "2026-10-01 08:00:00",
+          transactionType: "initial",
+          fundingSource: "other",
+          description: "Opening 6 boxes",
+          unitsDelta: 300,
+          costPerUnitCentavos: 70_000,
+        },
+        {
+          id: 2,
+          transactionDate: new Date("2026-10-01T12:00:00.000Z"),
+          createdAt: "2026-10-01 09:00:00",
           transactionType: "sale",
-          fundingSource: null,
+          fundingSource: "retained_cash",
           description: "Sale of 72 units",
           unitsDelta: -72,
           costPerUnitCentavos: 70_000,
-          saleId: 1,
         },
         {
-          id: 11,
+          id: 3,
           transactionDate: new Date("2026-10-02T12:00:00.000Z"),
           createdAt: "2026-10-02 09:00:00",
           transactionType: "purchase",
@@ -217,18 +219,37 @@ describe("inventory funding flow: sale to replacement purchase", () => {
           description: "Purchased 1 box — Next Box Fund replacement",
           unitsDelta: 50,
           costPerUnitCentavos: 70_000,
-          saleId: null,
         },
       ],
     });
 
-    expect(trace.map(item => item.fundImpactCentavos)).toEqual([
-      5_040_000,
-      -3_500_000,
+    expect(trace.map(item => item.runningInventoryUnits)).toEqual([
+      300,
+      228,
+      278,
     ]);
     expect(trace.map(item => item.runningBalanceCentavos)).toEqual([
+      0,
       5_040_000,
       1_540_000,
     ]);
+
+    const screenshotExample = calculateCapitalBalancedInventoryTrace({
+      ownerCapitalCentavos: 21_000_000,
+      costPerUnitCentavos: 70_000,
+      inventory: [
+        {
+          id: 4,
+          transactionDate: new Date("2026-10-03T12:00:00.000Z"),
+          createdAt: "2026-10-03 09:00:00",
+          transactionType: "adjustment",
+          fundingSource: "other",
+          description: "Current 176-unit inventory",
+          unitsDelta: 176,
+          costPerUnitCentavos: 70_000,
+        },
+      ],
+    });
+    expect(screenshotExample[0]?.runningBalanceCentavos).toBe(8_680_000);
   });
 });

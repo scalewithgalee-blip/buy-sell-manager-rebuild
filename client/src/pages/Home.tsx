@@ -825,7 +825,7 @@ export default function Home() {
       0
   );
   const nextBoxFundTraceByInventoryId = new Map(
-    (dashboard.nextBoxFundTransactionTrace ?? []).map((entry: any) => [
+    (dashboard.capitalBalancedInventoryTrace ?? []).map((entry: any) => [
       Number(entry.inventoryId),
       entry,
     ])
@@ -2656,11 +2656,10 @@ export default function Home() {
               Inventory transactions
             </h3>
             <div className="mt-3 rounded-lg bg-[#f0efff] px-3 py-2 text-xs text-[#5b4de1]">
-              <span className="font-semibold">Replacement Fund trace:</span>{" "}
-              Each sale recovers its COGS; each eligible Next Box Fund purchase
-              deducts its cost. Opening, transition, and setup stock are excluded.
-              Current traced balance: {peso(
-                dashboard.nextBoxFundTransactionTrace?.at(-1)?.runningBalanceCentavos ??
+              <span className="font-semibold">Capital-balanced history:</span>{" "}
+              Next Box Fund equals posted owner capital minus the running value of
+              inventory. Current balance: {peso(
+                dashboard.capitalBalancedInventoryTrace?.at(-1)?.runningBalanceCentavos ??
                   nextBoxFundCentavos
               )}
             </div>
@@ -2708,7 +2707,7 @@ export default function Home() {
                         return (
                           <>
                             <p className={impact < 0 ? "text-[#9d3f35]" : impact > 0 ? "text-[#287c65]" : "text-[#8d90a2]"}>
-                              {impact > 0 ? "+" : impact < 0 ? "−" : ""}{peso(Math.abs(impact))} {impact > 0 ? "recovered" : impact < 0 ? "deducted" : "no movement"}
+                              {impact > 0 ? "+" : impact < 0 ? "−" : ""}{peso(Math.abs(impact))} {impact > 0 ? "fund released" : impact < 0 ? "fund invested" : "no change"}
                             </p>
                             <p className="font-semibold text-[#5b4de1]">
                               Left: {peso(trace.runningBalanceCentavos)}
