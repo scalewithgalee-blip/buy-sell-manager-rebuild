@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateWeeklyReportHistory } from "./db";
+import { calculateBusinessAlerts, calculateWeeklyReportHistory } from "./db";
 
 describe("calculateWeeklyReportHistory", () => {
   it("reports combined gross profit earned for both owners", () => {
@@ -50,5 +50,25 @@ describe("calculateWeeklyReportHistory", () => {
       profitEarnedCentavos: 306_000,
     });
     expect(history[1]).not.toHaveProperty("cashVarianceCentavos");
+  });
+});
+
+describe("monthly profit goal alerts", () => {
+  it("congratulates the team when monthly net profit reaches the target", () => {
+    const alerts = calculateBusinessAlerts({
+      now: new Date("2026-10-24T12:00:00.000Z"),
+      sales: [],
+      currentWeekUnitsSold: 0,
+      weeklyTargetUnits: 500,
+      currentMonthNetProfitCentavos: 5_000_000,
+      monthlyProfitTargetCentavos: 5_000_000,
+    });
+
+    expect(alerts).toContainEqual(
+      expect.objectContaining({
+        kind: "goal_reached",
+        title: "Monthly profit goal reached",
+      })
+    );
   });
 });

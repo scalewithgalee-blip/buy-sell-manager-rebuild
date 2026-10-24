@@ -58,6 +58,7 @@ import {
   ReceiptText,
   Search,
   Settings,
+  Sparkles,
   Sun,
   ShieldAlert,
   ShieldCheck,
@@ -739,6 +740,7 @@ export default function Home() {
   >("all");
   const [showRetainedCashBreakdown, setShowRetainedCashBreakdown] =
     useState(false);
+  const [monthlyGoalToastShown, setMonthlyGoalToastShown] = useState(false);
   const [restorePreviewId, setRestorePreviewId] = useState<number | null>(null);
   const utils = trpc.useUtils();
   const accessQuery = trpc.access.status.useQuery();
@@ -1329,6 +1331,25 @@ export default function Home() {
     0,
     Math.min(100, (dashboard.periods.week.unitsSold / weeklyUnitsTarget) * 100)
   );
+  const monthlyProfitGoalReached =
+    monthlyProfitGoalCentavos > 0 &&
+    monthlyProfitEarnedCentavos >= monthlyProfitGoalCentavos;
+  useEffect(() => {
+    if (!isLive) return;
+    if (monthlyProfitGoalReached && !monthlyGoalToastShown) {
+      toast.success(
+        "Congratulations! You reached this month’s profit goal. Keep going — you can build something even bigger together!",
+        { duration: 7000 }
+      );
+      setMonthlyGoalToastShown(true);
+    } else if (!monthlyProfitGoalReached && monthlyGoalToastShown) {
+      setMonthlyGoalToastShown(false);
+    }
+  }, [
+    isLive,
+    monthlyProfitGoalReached,
+    monthlyGoalToastShown,
+  ]);
   const weeklyComparisonLabel =
     weeklyComparison.previousUnitsSold === 0
       ? weeklyComparison.currentUnitsSold === 0
@@ -1596,6 +1617,31 @@ export default function Home() {
           icon={Gauge}
         />
       </div>
+      {monthlyProfitGoalReached && (
+        <section
+          aria-live="polite"
+          className="relative mt-4 overflow-hidden rounded-2xl border border-[#d9d0ff] bg-gradient-to-r from-[#f0efff] via-[#fff8e7] to-[#e8fbf4] p-5 shadow-[0_12px_30px_rgba(109,93,252,.12)]"
+        >
+          <div className="pointer-events-none absolute -right-5 -top-8 h-24 w-24 rounded-full bg-[#ffe59b]/60 blur-2xl" />
+          <div className="relative flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/80 text-[#6d5dfc] shadow-sm">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-[#6d5dfc]">
+                Monthly goal reached
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-[#17182b]">
+                Congratulations — you did it!
+              </h3>
+              <p className="mt-1 text-sm leading-5 text-[#5f6377]">
+                You reached {peso(monthlyProfitEarnedCentavos)} in net profit this month.
+                Keep going — you and Nikki can build something even bigger together.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
       {showRetainedCashBreakdown && (
         <section className="panel mt-3 overflow-hidden border border-[#e2defe] bg-white">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#eeeef4] px-5 py-4">

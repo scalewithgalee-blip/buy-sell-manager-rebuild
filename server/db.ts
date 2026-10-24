@@ -2480,6 +2480,8 @@ export function calculateBusinessAlerts(input: {
   sales: BusinessAlertSale[];
   currentWeekUnitsSold: number;
   weeklyTargetUnits: number;
+  currentMonthNetProfitCentavos?: number;
+  monthlyProfitTargetCentavos?: number;
 }) {
   const recentStart = new Date(dayStart(input.now).getTime() - 29 * 86_400_000);
   const recentEnd = nextDay(dayStart(input.now));
@@ -2527,6 +2529,21 @@ export function calculateBusinessAlerts(input: {
       tone: "success",
       title: "Weekly goal reached",
       message: `${input.currentWeekUnitsSold.toLocaleString("en-PH")} packs/reams sold against the ${input.weeklyTargetUnits.toLocaleString("en-PH")} target.`,
+      date: dayKey(input.now),
+    });
+  }
+  if (
+    (input.monthlyProfitTargetCentavos ?? 0) > 0 &&
+    (input.currentMonthNetProfitCentavos ?? 0) >=
+      (input.monthlyProfitTargetCentavos ?? 0)
+  ) {
+    alerts.push({
+      id: `monthly-profit-goal-reached-${dayKey(input.now).slice(0, 7)}`,
+      kind: "goal_reached",
+      tone: "success",
+      title: "Monthly profit goal reached",
+      message:
+        "Congratulations! You reached this month’s profit goal. Keep going — you can build something even bigger together.",
       date: dayKey(input.now),
     });
   }
@@ -2856,16 +2873,18 @@ export async function getDashboardData(userId: number) {
     currentTargetUnits: settings.weeklyUnitsTarget,
     weeks: 12,
   });
+  const monthMetrics = summaryMetrics(
+    summariesInRange(monthRange),
+    daysInRange(monthRange.start, monthRange.end)
+  );
   const alerts = calculateBusinessAlerts({
     now,
     sales: salesRows,
     currentWeekUnitsSold: weekMetrics.unitsSold,
     weeklyTargetUnits: settings.weeklyUnitsTarget,
+    currentMonthNetProfitCentavos: monthMetrics.netProfitCentavos,
+    monthlyProfitTargetCentavos: settings.monthlyProfitTargetCentavos,
   });
-  const monthMetrics = summaryMetrics(
-    summariesInRange(monthRange),
-    daysInRange(monthRange.start, monthRange.end)
-  );
   const recent30 = summaryMetrics(
     summariesInRange({
       start: new Date(todayRange.start.getTime() - 29 * 86_400_000),
