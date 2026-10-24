@@ -1298,6 +1298,46 @@ export function calculateCapitalBalancedInventoryTrace(input: {
   });
 }
 
+export function groupCapitalBalancedInventoryTraceByDay(
+  trace: Array<{
+    transactionDate: Date;
+    unitsDelta: number;
+    fundImpactCentavos: number;
+    runningBalanceCentavos: number;
+    [key: string]: any;
+  }>
+) {
+  const groups = new Map<
+    string,
+    {
+      date: string;
+      transactions: typeof trace;
+      totalUnitsDelta: number;
+      fundMovementCentavos: number;
+      closingBalanceCentavos: number;
+    }
+  >();
+  for (const entry of trace) {
+    const date = dayKey(entry.transactionDate);
+    const group =
+      groups.get(date) ?? {
+        date,
+        transactions: [],
+        totalUnitsDelta: 0,
+        fundMovementCentavos: 0,
+        closingBalanceCentavos: entry.runningBalanceCentavos,
+      };
+    group.transactions.push(entry);
+    group.totalUnitsDelta += entry.unitsDelta;
+    group.fundMovementCentavos += entry.fundImpactCentavos;
+    group.closingBalanceCentavos = entry.runningBalanceCentavos;
+    groups.set(date, group);
+  }
+  return Array.from(groups.values()).sort((left, right) =>
+    right.date.localeCompare(left.date)
+  );
+}
+
 /** Daily replacement balance: today’s recovered COGS less today’s post-sale replacements. */
 export function calculateTodayNextBoxFundBalance(input: {
   todayCogsRecoveredCentavos: number;
@@ -3016,6 +3056,9 @@ export async function getDashboardData(userId: number) {
     nextBoxFundTodayCentavos: nextBoxFundToday.availableCentavos,
     nextBoxFundToday,
     capitalBalancedInventoryTrace,
+    inventoryHistoryByDay: groupCapitalBalancedInventoryTraceByDay(
+      capitalBalancedInventoryTrace
+    ),
     cashReconciliation: cashReconciliation
       ? {
           recordCode: cashReconciliation.recordCode,

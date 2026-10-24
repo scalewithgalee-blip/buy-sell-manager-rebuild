@@ -5,6 +5,7 @@ import {
   calculateInventoryPurchase,
   calculateNextBoxFundBalance,
   calculateCapitalBalancedInventoryTrace,
+  groupCapitalBalancedInventoryTraceByDay,
   calculateTodayNextBoxFundBalance,
 } from "./db";
 
@@ -251,5 +252,50 @@ describe("inventory funding flow: sale to replacement purchase", () => {
       ],
     });
     expect(screenshotExample[0]?.runningBalanceCentavos).toBe(8_680_000);
+  });
+
+  it("groups every same-date movement into one complete daily history", () => {
+    const trace = calculateCapitalBalancedInventoryTrace({
+      ownerCapitalCentavos: 21_000_000,
+      costPerUnitCentavos: 70_000,
+      inventory: [
+        {
+          id: 1,
+          transactionDate: new Date("2026-10-21T12:00:00.000Z"),
+          createdAt: "2026-10-21 03:35:08",
+          transactionType: "purchase",
+          fundingSource: "retained_cash",
+          description: "Purchased 2 boxes",
+          unitsDelta: 100,
+          costPerUnitCentavos: 70_000,
+        },
+        {
+          id: 2,
+          transactionDate: new Date("2026-10-21T12:00:00.000Z"),
+          createdAt: "2026-10-21 13:54:41",
+          transactionType: "sale",
+          fundingSource: "retained_cash",
+          description: "Sale of 102 units",
+          unitsDelta: -102,
+          costPerUnitCentavos: 70_000,
+        },
+        {
+          id: 3,
+          transactionDate: new Date("2026-10-21T12:00:00.000Z"),
+          createdAt: "2026-10-21 13:54:48",
+          transactionType: "purchase",
+          fundingSource: "retained_cash",
+          description: "Purchased 2 boxes",
+          unitsDelta: 100,
+          costPerUnitCentavos: 70_000,
+        },
+      ],
+    });
+    const days = groupCapitalBalancedInventoryTraceByDay(trace);
+
+    expect(days).toHaveLength(1);
+    expect(days[0]?.transactions).toHaveLength(3);
+    expect(days[0]?.totalUnitsDelta).toBe(98);
+    expect(days[0]?.closingBalanceCentavos).toBe(14_140_000);
   });
 });

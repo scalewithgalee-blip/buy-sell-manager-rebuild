@@ -824,12 +824,6 @@ export default function Home() {
       dashboard.nextBoxFund?.availableCentavos ??
       0
   );
-  const nextBoxFundTraceByInventoryId = new Map(
-    (dashboard.capitalBalancedInventoryTrace ?? []).map((entry: any) => [
-      Number(entry.inventoryId),
-      entry,
-    ])
-  );
   const capitalReconciliationDeltaCentavos = Number(
     dashboard.capitalReconciliationDeltaCentavos ??
       dashboard.inventoryValueCentavos +
@@ -2665,58 +2659,69 @@ export default function Home() {
             </div>
           </div>
           <div className="divide-y divide-[#eeeef4]">
-            {dashboard.recentInventory.map((item: any) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between gap-3 px-5 py-3"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-[#2d3040]">
-                    {item.description || item.transactionType}
-                  </p>
-                  <p className="mt-0.5 text-xs text-[#8d90a2]">
-                    {prettyDate(item.transactionDate)} ·{" "}
-                    {String(item.transactionType).replace("_", " ")}
-                    {item.transactionType === "purchase" && (
-                      <>
-                        {" "}
-                        ·{" "}
-                        {item.fundingSource === "retained_cash"
-                          ? "Next Box Fund"
-                          : item.fundingSource === "new_capital"
-                            ? "new owner capital"
-                            : item.fundingSource === "other"
-                              ? "other funding"
-                              : "legacy record"}
-                      </>
-                    )}
-                  </p>
+            {(dashboard.inventoryHistoryByDay ?? []).map((day: any) => (
+              <div key={day.date} className="px-5 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#17182b]">
+                      {prettyDate(day.date)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#8d90a2]">
+                      {day.transactions.length} movement{day.transactions.length === 1 ? "" : "s"}{" "}
+                      · {day.totalUnitsDelta >= 0 ? "+" : ""}{day.totalUnitsDelta} units that day
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right text-xs">
+                    <p className={day.fundMovementCentavos < 0 ? "text-[#9d3f35]" : "text-[#287c65]"}>
+                      {signedPeso(day.fundMovementCentavos)} fund movement
+                    </p>
+                    <p className="mt-0.5 font-semibold text-[#5b4de1]">
+                      Fund after day: {peso(day.closingBalanceCentavos)}
+                    </p>
+                  </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <span
-                    className={`inline-block rounded-lg px-2.5 py-1 text-sm font-semibold ${item.unitsDelta >= 0 ? "bg-[#f0efff] text-[#5b4de1]" : "bg-[#fff1ef] text-[#9d3f35]"}`}
-                  >
-                    {item.unitsDelta >= 0 ? "+" : ""}
-                    {item.unitsDelta} units
-                  </span>
-                  {nextBoxFundTraceByInventoryId.has(Number(item.id)) && (
-                    <div className="mt-1 text-[10px] leading-4">
-                      {(() => {
-                        const trace: any = nextBoxFundTraceByInventoryId.get(Number(item.id));
-                        const impact = Number(trace.fundImpactCentavos ?? 0);
-                        return (
-                          <>
-                            <p className={impact < 0 ? "text-[#9d3f35]" : impact > 0 ? "text-[#287c65]" : "text-[#8d90a2]"}>
-                              {impact > 0 ? "+" : impact < 0 ? "−" : ""}{peso(Math.abs(impact))} {impact > 0 ? "fund released" : impact < 0 ? "fund invested" : "no change"}
-                            </p>
-                            <p className="font-semibold text-[#5b4de1]">
-                              Left: {peso(trace.runningBalanceCentavos)}
-                            </p>
-                          </>
-                        );
-                      })()}
+                <div className="mt-3 space-y-3 border-l-2 border-[#e2defe] pl-3">
+                  {day.transactions.map((item: any) => (
+                    <div
+                      key={item.inventoryId}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[#2d3040]">
+                          {item.description || item.transactionType}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[#8d90a2]">
+                          {String(item.transactionType).replace("_", " ")}
+                          {item.transactionType === "purchase" && (
+                            <>
+                              {" "}·{" "}
+                              {item.fundingSource === "retained_cash"
+                                ? "Next Box Fund"
+                                : item.fundingSource === "new_capital"
+                                  ? "new owner capital"
+                                  : item.fundingSource === "other"
+                                    ? "other funding"
+                                    : "legacy record"}
+                            </>
+                          )}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <span
+                          className={`inline-block rounded-lg px-2.5 py-1 text-sm font-semibold ${item.unitsDelta >= 0 ? "bg-[#f0efff] text-[#5b4de1]" : "bg-[#fff1ef] text-[#9d3f35]"}`}
+                        >
+                          {item.unitsDelta >= 0 ? "+" : ""}
+                          {item.unitsDelta} units
+                        </span>
+                        <p className={item.fundImpactCentavos < 0 ? "mt-1 text-[10px] text-[#9d3f35]" : "mt-1 text-[10px] text-[#287c65]"}>
+                          {signedPeso(item.fundImpactCentavos)} fund movement
+                        </p>
+                        <p className="text-[10px] font-semibold text-[#5b4de1]">
+                          Left: {peso(item.runningBalanceCentavos)}
+                        </p>
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
             ))}
