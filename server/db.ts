@@ -1243,6 +1243,94 @@ export function calculateNextBoxFundBalance(input: {
   };
 }
 
+export function calculateNextBoxFundTransactionTrace(input: {
+  sales: Array<{
+    id: number;
+    saleDate: Date;
+    createdAt?: Date | string | null;
+    cogsCentavos: number;
+    isVoided: boolean;
+  }>;
+  inventory: Array<{
+    id: number;
+    transactionDate: Date;
+    createdAt?: Date | string | null;
+    transactionType: string;
+    fundingSource?: string | null;
+    description?: string | null;
+    unitsDelta: number;
+    costPerUnitCentavos: number;
+    saleId?: number | null;
+  }>;
+}) {
+  const eventTime = (
+    value: Date | string | null | undefined,
+    fallback: Date
+  ) =>
+    value instanceof Date
+      ? value.getTime()
+      : value
+        ? Date.parse(String(value))
+        : fallback.getTime();
+  const reconciliationTimes = input.inventory
+    .filter(
+      item =>
+        item.transactionType === "adjustment" &&
+        /physical inventory reconciliation/i.test(item.description ?? "")
+    )
+    .map(item => eventTime(item.createdAt, item.transactionDate))
+    .filter(Number.isFinite);
+  const cycleStartTime = reconciliationTimes.length
+    ? Math.max(...reconciliationTimes)
+    : -Infinity;
+  const salesById = new Map(input.sales.map(sale => [sale.id, sale]));
+  const events = input.inventory
+    .filter(
+      item => eventTime(item.createdAt, item.transactionDate) > cycleStartTime
+    )
+    .map(item => {
+      const sale = item.saleId ? salesById.get(item.saleId) : undefined;
+      const isReplacementPurchase =
+        item.transactionType === "purchase" &&
+        item.fundingSource === "retained_cash" &&
+        !/opening|transition|setup/i.test(item.description ?? "");
+      const fundImpactCentavos =
+        item.transactionType === "sale"
+          ? sale && !sale.isVoided
+            ? Math.max(0, sale.cogsCentavos)
+            : 0
+          : isReplacementPurchase
+            ? -Math.max(0, item.unitsDelta) * item.costPerUnitCentavos
+            : 0;
+      return {
+        inventoryId: item.id,
+        transactionDate: item.transactionDate,
+        transactionType: item.transactionType,
+        description: item.description ?? item.transactionType,
+        unitsDelta: item.unitsDelta,
+        fundImpactCentavos,
+        reason:
+          item.transactionType === "sale"
+            ? sale?.isVoided
+              ? "Voided sale — no COGS recovery"
+              : "Recovered COGS from sale"
+            : isReplacementPurchase
+              ? "Replacement purchase funded by Next Box Fund"
+              : "No Next Box Fund movement",
+        eventTime: eventTime(item.createdAt, item.transactionDate),
+      };
+    })
+    .sort((left, right) => left.eventTime - right.eventTime || left.inventoryId - right.inventoryId);
+  let runningRawCentavos = 0;
+  return events.map(event => {
+    runningRawCentavos += event.fundImpactCentavos;
+    return {
+      ...event,
+      runningBalanceCentavos: Math.max(0, runningRawCentavos),
+    };
+  });
+}
+
 /** Daily replacement balance: today’s recovered COGS less today’s post-sale replacements. */
 export function calculateTodayNextBoxFundBalance(input: {
   todayCogsRecoveredCentavos: number;
@@ -2737,6 +2825,10 @@ export async function getDashboardData(userId: number) {
     sales: salesRows,
     inventory: currentInventoryRows,
   });
+  const nextBoxFundTransactionTrace = calculateNextBoxFundTransactionTrace({
+    sales: salesRows,
+    inventory: currentInventoryRows,
+  });
   const receivables: never[] = [];
   const outstandingReceivablesCentavos = 0;
   const weekMetrics = summaryMetrics(
@@ -2955,6 +3047,7 @@ export async function getDashboardData(userId: number) {
     // The primary fund carries forward across days; retain the daily diagnostic separately.
     nextBoxFundTodayCentavos: nextBoxFundToday.availableCentavos,
     nextBoxFundToday,
+    nextBoxFundTransactionTrace,
     cashReconciliation: cashReconciliation
       ? {
           recordCode: cashReconciliation.recordCode,

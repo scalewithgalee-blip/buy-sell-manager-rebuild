@@ -824,6 +824,12 @@ export default function Home() {
       dashboard.nextBoxFund?.availableCentavos ??
       0
   );
+  const nextBoxFundTraceByInventoryId = new Map(
+    (dashboard.nextBoxFundTransactionTrace ?? []).map((entry: any) => [
+      Number(entry.inventoryId),
+      entry,
+    ])
+  );
   const capitalReconciliationDeltaCentavos = Number(
     dashboard.capitalReconciliationDeltaCentavos ??
       dashboard.inventoryValueCentavos +
@@ -2649,6 +2655,15 @@ export default function Home() {
             <h3 className="mt-1 text-lg font-semibold text-[#17182b]">
               Inventory transactions
             </h3>
+            <div className="mt-3 rounded-lg bg-[#f0efff] px-3 py-2 text-xs text-[#5b4de1]">
+              <span className="font-semibold">Replacement Fund trace:</span>{" "}
+              Each sale recovers its COGS; each eligible Next Box Fund purchase
+              deducts its cost. Opening, transition, and setup stock are excluded.
+              Current traced balance: {peso(
+                dashboard.nextBoxFundTransactionTrace?.at(-1)?.runningBalanceCentavos ??
+                  nextBoxFundCentavos
+              )}
+            </div>
           </div>
           <div className="divide-y divide-[#eeeef4]">
             {dashboard.recentInventory.map((item: any) => (
@@ -2678,12 +2693,32 @@ export default function Home() {
                     )}
                   </p>
                 </div>
-                <span
-                  className={`rounded-lg px-2.5 py-1 text-sm font-semibold ${item.unitsDelta >= 0 ? "bg-[#f0efff] text-[#5b4de1]" : "bg-[#fff1ef] text-[#9d3f35]"}`}
-                >
-                  {item.unitsDelta >= 0 ? "+" : ""}
-                  {item.unitsDelta} units
-                </span>
+                <div className="shrink-0 text-right">
+                  <span
+                    className={`inline-block rounded-lg px-2.5 py-1 text-sm font-semibold ${item.unitsDelta >= 0 ? "bg-[#f0efff] text-[#5b4de1]" : "bg-[#fff1ef] text-[#9d3f35]"}`}
+                  >
+                    {item.unitsDelta >= 0 ? "+" : ""}
+                    {item.unitsDelta} units
+                  </span>
+                  {nextBoxFundTraceByInventoryId.has(Number(item.id)) && (
+                    <div className="mt-1 text-[10px] leading-4">
+                      {(() => {
+                        const trace: any = nextBoxFundTraceByInventoryId.get(Number(item.id));
+                        const impact = Number(trace.fundImpactCentavos ?? 0);
+                        return (
+                          <>
+                            <p className={impact < 0 ? "text-[#9d3f35]" : impact > 0 ? "text-[#287c65]" : "text-[#8d90a2]"}>
+                              {impact > 0 ? "+" : impact < 0 ? "−" : ""}{peso(Math.abs(impact))} {impact > 0 ? "recovered" : impact < 0 ? "deducted" : "no movement"}
+                            </p>
+                            <p className="font-semibold text-[#5b4de1]">
+                              Left: {peso(trace.runningBalanceCentavos)}
+                            </p>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>

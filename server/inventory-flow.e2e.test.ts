@@ -4,6 +4,7 @@ import {
   calculateCurrentNextBoxFundBalance,
   calculateInventoryPurchase,
   calculateNextBoxFundBalance,
+  calculateNextBoxFundTransactionTrace,
   calculateTodayNextBoxFundBalance,
 } from "./db";
 
@@ -182,5 +183,52 @@ describe("inventory funding flow: sale to replacement purchase", () => {
     expect(result.cogsRecoveredCentavos).toBe(5_040_000);
     expect(result.replacementPurchasesCentavos).toBe(3_500_000);
     expect(result.availableCentavos).toBe(1_540_000);
+  });
+
+  it("shows recovered COGS, replacement deductions, and the remaining balance per inventory transaction", () => {
+    const trace = calculateNextBoxFundTransactionTrace({
+      sales: [
+        {
+          id: 1,
+          saleDate: new Date("2026-10-01T12:00:00.000Z"),
+          createdAt: "2026-10-01 09:00:00",
+          cogsCentavos: 5_040_000,
+          isVoided: false,
+        },
+      ],
+      inventory: [
+        {
+          id: 10,
+          transactionDate: new Date("2026-10-01T12:00:00.000Z"),
+          createdAt: "2026-10-01 09:00:01",
+          transactionType: "sale",
+          fundingSource: null,
+          description: "Sale of 72 units",
+          unitsDelta: -72,
+          costPerUnitCentavos: 70_000,
+          saleId: 1,
+        },
+        {
+          id: 11,
+          transactionDate: new Date("2026-10-02T12:00:00.000Z"),
+          createdAt: "2026-10-02 09:00:00",
+          transactionType: "purchase",
+          fundingSource: "retained_cash",
+          description: "Purchased 1 box — Next Box Fund replacement",
+          unitsDelta: 50,
+          costPerUnitCentavos: 70_000,
+          saleId: null,
+        },
+      ],
+    });
+
+    expect(trace.map(item => item.fundImpactCentavos)).toEqual([
+      5_040_000,
+      -3_500_000,
+    ]);
+    expect(trace.map(item => item.runningBalanceCentavos)).toEqual([
+      5_040_000,
+      1_540_000,
+    ]);
   });
 });
