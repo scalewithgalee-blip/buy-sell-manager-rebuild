@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { calculateBusinessAlerts, calculateWeeklyReportHistory } from "./db";
+import {
+  businessNow,
+  calculateBusinessAlerts,
+  calculateWeeklyReportHistory,
+  startOfMondayUtc,
+} from "./db";
+
+describe("business calendar rollover", () => {
+  it("starts the new Philippines week on Monday before UTC midnight passes", () => {
+    const localMonday = businessNow(new Date("2026-10-25T23:56:00.000Z"));
+    expect(localMonday.toISOString().slice(0, 10)).toBe("2026-10-26");
+    expect(startOfMondayUtc(localMonday).toISOString().slice(0, 10)).toBe(
+      "2026-10-26"
+    );
+  });
+});
 
 describe("calculateWeeklyReportHistory", () => {
   it("reports combined gross profit earned for both owners", () => {

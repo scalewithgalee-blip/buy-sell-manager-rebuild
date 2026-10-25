@@ -508,7 +508,10 @@ async function ensureDailyReportingReadModel(userId: number | null) {
     const start = dayStart(row.value);
     dates.set(dayKey(start), start);
   }
-  if (!dates.size) dates.set(dayKey(new Date()), dayStart(new Date()));
+  if (!dates.size) {
+    const now = businessNow();
+    dates.set(dayKey(now), dayStart(now));
+  }
   for (const date of Array.from(dates.values()).sort(
     (left, right) => left.getTime() - right.getTime()
   )) {
@@ -683,6 +686,10 @@ const dayStart = (date: Date) =>
   );
 const nextDay = (date: Date) => new Date(dayStart(date).getTime() + 86_400_000);
 const dayKey = (date: Date) => date.toISOString().slice(0, 10);
+const BUSINESS_TIMEZONE_OFFSET_MS = 8 * 60 * 60 * 1000;
+/** The business operates on Philippines local calendar days (UTC+8, no DST). */
+export const businessNow = (instant = new Date()) =>
+  new Date(instant.getTime() + BUSINESS_TIMEZONE_OFFSET_MS);
 const sum = (values: number[]) =>
   values.reduce((total, value) => total + value, 0);
 
@@ -2392,7 +2399,7 @@ export function calculateWeeklyUnitComparison(
 async function saveCurrentWeeklyTargetSnapshot(
   userId: number | null,
   targetUnits: number,
-  now = new Date()
+  now = businessNow()
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
@@ -2726,7 +2733,7 @@ export async function getDashboardData(userId: number) {
   await ensureDailyReportingReadModel(userId);
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
-  const now = new Date();
+  const now = businessNow();
   const todayStart = dayStart(now);
   const currentYearStart = new Date(
     Date.UTC(now.getUTCFullYear(), 0, 1)
@@ -3292,7 +3299,7 @@ export async function getTransitionReport(userId: number) {
     gale.startingCapitalCentavos,
     actualApplicableProfitCentavos
   );
-  const now = new Date();
+  const now = businessNow();
   const currentInventoryUnits = sum(
     inventoryRows
       .filter(row => row.transactionDate < nextDay(dayStart(now)))
@@ -4763,10 +4770,11 @@ export async function createBusinessBackup(
 
 export async function runAutomaticBackupCycle() {
   const now = new Date();
+  const businessDate = businessNow(now);
   const created: unknown[] = [await createBusinessBackup(null, "daily")];
-  if (now.getUTCDay() === 0)
+  if (businessDate.getUTCDay() === 0)
     created.push(await createBusinessBackup(null, "weekly"));
-  if (now.getUTCDate() === 1)
+  if (businessDate.getUTCDate() === 1)
     created.push(await createBusinessBackup(null, "monthly"));
   return created;
 }
@@ -4789,7 +4797,7 @@ export async function runIntegrityCheck(userId: number | null) {
     ]);
   const latestClose = closingRows[0];
   const activeSales = saleRows.filter(sale => !sale.isVoided);
-  const now = new Date();
+  const now = businessNow();
   const ledgerInventoryUnits = sum(
     inventoryRows
       .filter(row => row.transactionDate < nextDay(dayStart(now)))
@@ -5199,7 +5207,7 @@ export async function getProfitLedgerData(userId: number) {
     [gale.id, currentShares.galeShareBasisPoints],
     [nikki.id, currentShares.nikkiShareBasisPoints],
   ]);
-  const todayStart = dayStart(new Date());
+  const todayStart = dayStart(businessNow());
   const todayEnd = nextDay(todayStart);
   const dailyGrossProfitCentavos = sum(
     entryRows

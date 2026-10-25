@@ -12,3 +12,12 @@ The viewer PIN now exposes only the shared Inventory page. Viewer sessions are a
 - [x] Remove the accidental duplicate retry baseline while preserving the original reconciliation and audit event.
 - [x] Make identical retries idempotent so they cannot create duplicate cash baselines.
 - [x] Validate TypeScript, all 53 tests, production build, diff cleanliness, and live totals.
+
+## Philippines-local weekly rollover — October 26, 2026
+
+- [x] Make current-day and current-week reporting use the business’s Philippines local calendar (UTC+8) instead of the server’s UTC date.
+- [x] Start the active week on Monday, October 26, 2026, with the saved 500-unit target.
+- [x] Reset current-week progress to 0 units and ₱0 profit without altering October 19–25 history.
+- [x] Create the October 26 weekly target snapshot through the normal dashboard initialization path.
+- [x] Add regression coverage for Monday rollover before UTC midnight.
+- [x] Validate TypeScript, all 54 tests, production build, diff cleanliness, and live dashboard output.

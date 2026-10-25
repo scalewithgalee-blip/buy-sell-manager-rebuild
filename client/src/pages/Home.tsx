@@ -95,9 +95,13 @@ function viewFromHash(hash: string): View {
       | undefined) ?? "dashboard"
   );
 }
-const today = () => new Date().toISOString().slice(0, 10);
+const PHILIPPINES_OFFSET_MS = 8 * 60 * 60 * 1000;
+const businessNow = () => new Date(Date.now() + PHILIPPINES_OFFSET_MS);
+const today = () => businessNow().toISOString().slice(0, 10);
 const daysAgo = (days: number) =>
-  new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  new Date(businessNow().getTime() - days * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 const peso = (centavos: number) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",
