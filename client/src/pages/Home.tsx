@@ -1355,16 +1355,12 @@ export default function Home() {
     monthlyGoalToastShown,
   ]);
   const viewerViews: View[] = [
-    "dashboard",
-    "sales",
     "inventory",
-    "money",
-    "reports",
   ];
   useEffect(() => {
     if (isViewerAccess && !viewerViews.includes(view)) {
-      setView("dashboard");
-      window.location.hash = viewHash.dashboard;
+      setView("inventory");
+      window.location.hash = viewHash.inventory;
     }
   }, [isViewerAccess, view]);
   const weeklyComparisonLabel =
@@ -1541,7 +1537,7 @@ export default function Home() {
         action={
           !canEdit ? (
             <span className="rounded-lg bg-[#f7f7fb] px-3 py-2 text-xs font-semibold text-[#8d90a2]">
-              Viewer access · read-only
+              Viewer access · inventory-only
             </span>
           ) : (
           <div className="flex flex-wrap gap-2">
@@ -4719,7 +4715,7 @@ export default function Home() {
               </button>
               {isViewerAccess && (
                 <span className="hidden rounded-lg bg-[#fff8e7] px-3 py-2 text-xs font-semibold text-[#9a6a00] xl:inline">
-                  Viewer · read-only
+                  Viewer · inventory-only
                 </span>
               )}
               <AlertCenter
@@ -5012,7 +5008,7 @@ function PublicAccessScreen({ onUnlocked }: { onUnlocked: () => void }) {
       setError("");
       toast.success(
         result.role === "viewer"
-          ? "Viewer access granted — read-only mode."
+          ? "Viewer access granted — Inventory-only mode."
           : "Admin access granted."
       );
       onUnlocked();
@@ -5031,8 +5027,8 @@ function PublicAccessScreen({ onUnlocked }: { onUnlocked: () => void }) {
         </p>
         <h1 className="mt-2 text-2xl font-semibold">Enter access PIN</h1>
         <p className="mt-2 text-sm leading-6 text-[#8d90a2]">
-          Enter the admin PIN for full access or the viewer PIN for read-only
-          dashboards and history.
+          Enter the admin PIN for full access or the viewer PIN for the
+          read-only Inventory page.
         </p>
         <form
           className="mt-6 space-y-3"

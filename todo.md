@@ -1,8 +1,4 @@
 
-## Viewer crash correction — October 24, 2026
+## Inventory-only viewer access — October 25, 2026
 
-- [x] Reproduce the deployed PIN 2026 flow in a real browser.
-- [x] Identify React error #310 as a hook-order violation caused by a viewer-navigation useEffect placed after conditional loading/access returns.
-- [x] Move the viewer-navigation effect before all conditional returns so admin and viewer renders use identical hook ordering.
-- [x] Confirm the deployed API accepts PIN 2026 and returns a working dashboard payload.
-- [x] Validate TypeScript, all 53 tests, production build, and diff cleanliness before redeployment.
+The viewer PIN now exposes only the shared Inventory page. Viewer sessions are automatically redirected to Inventory if they enter another hash route, the viewer navigation contains no Dashboard, Sales, Money, Reports, Settings, Data, or Separate Inventory links, and the existing server-side rule still blocks all mutations. Admin access remains unchanged. TypeScript, all 53 tests, production build, and diff checks pass.
