@@ -665,6 +665,12 @@ export default function Home() {
     ownerId: "",
     notes: "",
   });
+  const [sharedReconciliation, setSharedReconciliation] = useState({
+    date: daysAgo(1),
+    inventoryUnits: "",
+    cashLeft: "",
+    notes: "",
+  });
   const [separatePurchase, setSeparatePurchase] = useState({
     date: today(),
     boxes: "",
@@ -1059,6 +1065,23 @@ export default function Home() {
     },
     onError: error => toast.error(error.message),
   });
+  const reconcileSharedPosition =
+    trpc.business.reconcileSharedPosition.useMutation({
+      onSuccess: result => {
+        toast.success(
+          `Reconciliation saved: ${number(result.inventoryUnits)} units and ${peso(result.cashLeftCentavos)} cash left.`
+        );
+        setSharedReconciliation({
+          date: daysAgo(1),
+          inventoryUnits: "",
+          cashLeft: "",
+          notes: "",
+        });
+        utils.business.dashboard.invalidate();
+        utils.business.dataResilience.invalidate();
+      },
+      onError: error => toast.error(error.message),
+    });
   const addSeparatePurchase =
     trpc.business.addSeparateInventoryPurchase.useMutation({
       onSuccess: result => {
@@ -2488,6 +2511,7 @@ export default function Home() {
         />
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
+        <div className="space-y-5">
         <form
           onSubmit={e => {
             e.preventDefault();
@@ -2715,6 +2739,118 @@ export default function Home() {
               : "Add boxes to inventory"}
           </button>
         </form>
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            const inventoryUnits = Number(sharedReconciliation.inventoryUnits);
+            const cashLeftPesos = Number(sharedReconciliation.cashLeft);
+            if (!Number.isInteger(inventoryUnits) || inventoryUnits < 0)
+              return toast.error("Enter a whole-number physical inventory count.");
+            if (!Number.isFinite(cashLeftPesos) || cashLeftPesos < 0)
+              return toast.error("Enter the cash left as zero or greater.");
+            reconcileSharedPosition.mutate({
+              date: sharedReconciliation.date,
+              inventoryUnits,
+              cashLeftPesos,
+              notes: sharedReconciliation.notes || undefined,
+            });
+          }}
+          className={`panel p-5 ${canEdit ? "" : "hidden"}`}
+          aria-hidden={!canEdit}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
+            Manual reconciliation
+          </p>
+          <h3 className="mt-1 text-lg font-semibold text-[#17182b]">
+            Confirm stock and cash left
+          </h3>
+          <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
+            This adds an auditable adjustment and a cash baseline. It does not
+            delete or rewrite sales, purchases, profit, or capital history.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label info="Use the date the physical count and cash check were performed.">
+                Check date
+              </Label>
+              <input
+                required
+                type="date"
+                value={sharedReconciliation.date}
+                onChange={e =>
+                  setSharedReconciliation({
+                    ...sharedReconciliation,
+                    date: e.target.value,
+                  })
+                }
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label info="The actual shared inventory units physically counted on the check date.">
+                Physical units
+              </Label>
+              <input
+                required
+                min="0"
+                step="1"
+                type="number"
+                value={sharedReconciliation.inventoryUnits}
+                onChange={e =>
+                  setSharedReconciliation({
+                    ...sharedReconciliation,
+                    inventoryUnits: e.target.value,
+                  })
+                }
+                placeholder="274"
+                className="field mt-1 text-lg font-semibold"
+              />
+            </div>
+            <div>
+              <Label info="The actual shared business cash physically left after the check.">
+                Cash left (₱)
+              </Label>
+              <input
+                required
+                min="0"
+                step="0.01"
+                type="number"
+                value={sharedReconciliation.cashLeft}
+                onChange={e =>
+                  setSharedReconciliation({
+                    ...sharedReconciliation,
+                    cashLeft: e.target.value,
+                  })
+                }
+                placeholder="18200"
+                className="field mt-1 text-lg font-semibold"
+              />
+            </div>
+          </div>
+          <div className="mt-3">
+            <Label>Audit note</Label>
+            <input
+              value={sharedReconciliation.notes}
+              onChange={e =>
+                setSharedReconciliation({
+                  ...sharedReconciliation,
+                  notes: e.target.value,
+                })
+              }
+              placeholder="Inventory manual check and cash count"
+              className="field mt-1"
+            />
+          </div>
+          <button
+            disabled={reconcileSharedPosition.isPending}
+            className="btn-primary mt-5 w-full justify-center"
+          >
+            {reconcileSharedPosition.isPending
+              ? "Saving reconciliation…"
+              : "Save manual reconciliation"}
+          </button>
+        </form>
+        </div>
         <section className="panel overflow-hidden">
           <div className="px-5 py-4">
             <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#8d90a2]">

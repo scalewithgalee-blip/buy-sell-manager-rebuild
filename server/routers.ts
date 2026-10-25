@@ -18,6 +18,7 @@ import {
 import {
   addCapitalTransaction,
   addInventoryPurchase,
+  reconcileSharedPosition,
   addExpenseRecord,
   addSaleRecord,
   createBusinessBackup,
@@ -268,6 +269,18 @@ export const appRouter = router({
       )
       .mutation(({ ctx, input }) =>
         addInventoryPurchase(ctx.user?.id ?? 0, input)
+      ),
+    reconcileSharedPosition: publicAccessProcedure
+      .input(
+        z.object({
+          date: day,
+          inventoryUnits: z.number().int().min(0).max(10_000_000),
+          cashLeftPesos: z.number().nonnegative().max(10_000_000_000),
+          notes: z.string().max(2_000).optional(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        reconcileSharedPosition(ctx.user?.id ?? 0, input)
       ),
     recordProfitDistribution: publicAccessProcedure
       .input(

@@ -3941,6 +3941,164 @@ export async function addInventoryPurchase(
   };
 }
 
+/** Records a physical stock count and cash-on-hand baseline without rewriting prior ledger rows. */
+export async function reconcileSharedPosition(
+  userId: number,
+  input: {
+    date: string;
+    inventoryUnits: number;
+    cashLeftPesos: number;
+    notes?: string;
+  }
+) {
+  await ensureBusinessSetup(userId);
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const [product, settings, inventoryRows] = await Promise.all([
+    db
+      .select()
+      .from(products)
+      .where(eq(products.active, true))
+      .orderBy(asc(products.id))
+      .limit(1),
+    db.select().from(businessSettings).limit(1),
+    db.select().from(inventoryTransactions),
+  ]);
+  if (!product[0] || !settings[0])
+    throw new Error("Set up an active product before recording reconciliation.");
+  if (!Number.isInteger(input.inventoryUnits) || input.inventoryUnits < 0)
+    throw new Error("Inventory count must be a whole number of units.");
+  if (!Number.isFinite(input.cashLeftPesos) || input.cashLeftPesos < 0)
+    throw new Error("Cash left must be zero or greater.");
+
+  const reconciliationDate = dateAtNoonUtc(input.date);
+  const dayEnd = nextDay(reconciliationDate);
+  const currentUnits = sum(
+    inventoryRows
+      .filter(
+        row =>
+          row.productId === product[0].id && row.transactionDate < dayEnd
+      )
+      .map(row => row.unitsDelta)
+  );
+  const unitsDelta = input.inventoryUnits - currentUnits;
+  const cashLeftCentavos = pesoToCentavos(input.cashLeftPesos);
+  const note =
+    input.notes?.trim() ||
+    `Manual reconciliation confirmed ${input.inventoryUnits} inventory units and ₱${input.cashLeftPesos.toLocaleString("en-PH")} cash left.`;
+  const [existingCash] = await db
+    .select()
+    .from(cashReconciliations)
+    .where(
+      and(
+        eq(cashReconciliations.reconciliationDate, reconciliationDate),
+        eq(cashReconciliations.amountCentavos, cashLeftCentavos),
+        eq(cashReconciliations.notes, note)
+      )
+    )
+    .orderBy(desc(cashReconciliations.id))
+    .limit(1);
+  if (existingCash && unitsDelta === 0) {
+    return {
+      inventoryId: null,
+      inventoryRecordCode: null,
+      cashId: existingCash.id,
+      cashRecordCode: existingCash.recordCode,
+      date: input.date,
+      previousInventoryUnits: currentUnits,
+      inventoryUnits: input.inventoryUnits,
+      inventoryUnitsDelta: 0,
+      cashLeftCentavos,
+      note,
+      duplicate: true,
+    };
+  }
+
+  const result = await db.transaction(async tx => {
+    let inventoryId: number | null = null;
+    let inventoryRecordCode: string | null = null;
+    if (unitsDelta !== 0) {
+      const inventoryInsert = await tx.insert(inventoryTransactions).values({
+        transactionDate: reconciliationDate,
+        productId: product[0].id,
+        transactionType: "adjustment",
+        fundingSource: "other",
+        unitsDelta,
+        costPerUnitCentavos: settings[0].defaultCostPerUnitCentavos,
+        description: `Physical inventory reconciliation - ${input.inventoryUnits} units`,
+        notes: note,
+        createdBy: userId,
+      });
+      inventoryId = Number(
+        (inventoryInsert as any)[0]?.insertId ?? (inventoryInsert as any).insertId
+      );
+      inventoryRecordCode = makeRecordCode(
+        "inventory",
+        reconciliationDate,
+        inventoryId
+      );
+      await tx
+        .update(inventoryTransactions)
+        .set({ recordCode: inventoryRecordCode, updatedBy: userId })
+        .where(eq(inventoryTransactions.id, inventoryId));
+    }
+
+    const cashPendingCode = `CASH-PENDING-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const cashInsert = await tx.insert(cashReconciliations).values({
+      recordCode: cashPendingCode,
+      reconciliationDate,
+      amountCentavos: cashLeftCentavos,
+      notes: note,
+      createdBy: userId,
+    });
+    const cashId = Number(
+      (cashInsert as any)[0]?.insertId ?? (cashInsert as any).insertId
+    );
+    const cashRecordCode = makeRecordCode("cash", reconciliationDate, cashId);
+    await tx
+      .update(cashReconciliations)
+      .set({ recordCode: cashRecordCode })
+      .where(eq(cashReconciliations.id, cashId));
+
+    return {
+      inventoryId,
+      inventoryRecordCode,
+      cashId,
+      cashRecordCode,
+    };
+  });
+
+  await recordAudit(
+    userId,
+    "reconciled",
+    "shared_position",
+    input.date,
+    "Recorded a dated physical inventory and cash-on-hand reconciliation without rewriting prior ledger history.",
+    undefined,
+    {
+      date: input.date,
+      previousInventoryUnits: currentUnits,
+      inventoryUnits: input.inventoryUnits,
+      inventoryUnitsDelta: unitsDelta,
+      cashLeftCentavos,
+      inventoryRecordCode: result.inventoryRecordCode,
+      cashRecordCode: result.cashRecordCode,
+      notes: note,
+    }
+  );
+  await refreshDailyReportSummary(userId, reconciliationDate);
+  return {
+    ...result,
+    date: input.date,
+    previousInventoryUnits: currentUnits,
+    inventoryUnits: input.inventoryUnits,
+    inventoryUnitsDelta: unitsDelta,
+    cashLeftCentavos,
+    note,
+    duplicate: false,
+  };
+}
+
 export async function closeBusinessDay(
   userId: number,
   dateValue: string,
