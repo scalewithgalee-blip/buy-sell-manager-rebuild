@@ -2972,7 +2972,7 @@ export default function Home() {
           </button>
         </form>
         </div>
-        <section className="panel overflow-hidden">
+        <section className="panel mt-5 overflow-hidden">
           <div className="px-5 py-4">
             <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#8d90a2]">
               Traceable movements
