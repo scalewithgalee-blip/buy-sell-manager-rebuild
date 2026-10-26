@@ -59,3 +59,10 @@ The viewer PIN now exposes only the shared Inventory page. Viewer sessions are a
 - [x] Keep Traceable Movements / Inventory transactions below the two form panels.
 - [x] Preserve the custom and default date filters for both Inventory history and Recent Sales.
 - [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.
+
+## Owner display cleanup — October 26, 2026
+
+- [x] Remove Nikki’s Dad from visible owner summary cards and settlement choices.
+- [x] Remove the zero-share owner card and explanatory references from sales, settings, and capital-history views.
+- [x] Preserve the underlying owner record and historical allocations so no financial history changes.
+- [x] Validate TypeScript, all 54 tests, production build, diff cleanliness, and the UI reference scan.

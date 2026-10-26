@@ -2281,8 +2281,7 @@ export default function Home() {
             <Zap className="mr-2 inline h-4 w-4" />
             Cash-only sale. Each unit is ₱700 cost + ₱30 profit = ₱730 cash
             collected. Future gross profit is split between Gale and Nikki based
-            on their current capital contribution; Nikki's Dad receives 0% from
-            daily sales.
+            on their current capital contribution.
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -2301,7 +2300,7 @@ export default function Home() {
                 Operator
               </Label>
               <div className="mt-1 flex h-11 items-center rounded-md bg-[#f7f7fb] px-3 text-sm font-medium text-[#64687b]">
-                {setup?.operators?.[0]?.name ?? "Nikki’s Dad"}
+                {setup?.operators?.[0]?.name ?? "Business operator"}
               </div>
             </div>
             <div>
@@ -3156,12 +3155,13 @@ export default function Home() {
         />
         <div className="rounded-xl border border-[#e2defe] bg-[#f3f1ff] p-4 text-sm leading-5 text-[#3f347e]">
           Daily gross profit is allocated between Gale and Nikki based on their
-          current capital contribution. Nikki's Dad receives 0% from daily
-          sales; his settlement is handled separately.
+          current capital contribution.
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-3">
-        {profitLedger.ownerSummaries.map((owner: any) => (
+        {profitLedger.ownerSummaries
+          .filter((owner: any) => owner.name !== "Nikki's Dad" && owner.name !== "Nikki’s Dad")
+          .map((owner: any) => (
           <section key={owner.id} className="panel p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -3265,7 +3265,9 @@ export default function Home() {
                 className="field mt-1"
               >
                 <option value="">Choose owner</option>
-                {profitLedger.ownerSummaries.map((owner: any) => (
+        {profitLedger.ownerSummaries
+          .filter((owner: any) => owner.name !== "Nikki's Dad" && owner.name !== "Nikki’s Dad")
+          .map((owner: any) => (
                   <option key={owner.id} value={owner.id}>
                     {owner.name} · owed {peso(owner.profitOwedCentavos)}
                   </option>
@@ -3446,10 +3448,6 @@ export default function Home() {
                         Nikki {(event.nikkiShareBasisPoints / 100).toFixed(2)}%
                       </span>
                     </div>
-                    <p className="mt-2 text-[11px] font-semibold uppercase tracking-[.12em] text-[#9699aa]">
-                      Nikki’s Dad · 0.00% daily-sale share ·{" "}
-                      {peso(event.totalInvestorCapitalCentavos)} total capital
-                    </p>
                   </div>
                 </div>
               ))}
@@ -4302,8 +4300,7 @@ export default function Home() {
           <p className="mt-1 text-sm text-[#8d90a2]">
             Every new daily sale allocates gross profit only between Gale and
             Nikki using their current capital contribution. Historical sale
-            allocations remain unchanged, and Nikki’s Dad receives 0% from daily
-            sales.
+            allocations remain unchanged.
           </p>
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <div className="rounded-xl bg-[#f0efff] p-4">
@@ -4330,14 +4327,6 @@ export default function Home() {
                   )?.currentProfitShareBasisPoints ?? 0) / 100
                 ).toFixed(2)}
                 %
-              </p>
-            </div>
-            <div className="rounded-xl bg-[#f7f7fb] p-4">
-              <p className="text-xs font-semibold uppercase tracking-[.12em] text-[#8d90a2]">
-                Nikki’s Dad
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-[#64687b]">
-                0.00%
               </p>
             </div>
           </div>
