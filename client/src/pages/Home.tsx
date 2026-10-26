@@ -748,6 +748,9 @@ export default function Home() {
   const [historyStatus, setHistoryStatus] = useState<
     "all" | "active" | "voided"
   >("all");
+  const [inventoryHistoryRange, setInventoryHistoryRange] = useState<
+    "week" | "month" | "all"
+  >("week");
   const [showRetainedCashBreakdown, setShowRetainedCashBreakdown] =
     useState(false);
   const [monthlyGoalToastShown, setMonthlyGoalToastShown] = useState(false);
@@ -811,6 +814,16 @@ export default function Home() {
   });
   const dashboard = (dashboardQuery.data ?? demo) as typeof demo &
     Record<string, any>;
+  const filteredInventoryHistory = useMemo(() => {
+    const history = (dashboard.inventoryHistoryByDay ?? []) as Array<{
+      date: string;
+      [key: string]: any;
+    }>;
+    if (inventoryHistoryRange === "all") return history;
+    const cutoff =
+      inventoryHistoryRange === "week" ? daysAgo(6) : daysAgo(29);
+    return history.filter(day => day.date >= cutoff);
+  }, [dashboard.inventoryHistoryByDay, inventoryHistoryRange]);
   const operatingCash =
     dashboard.operatingCash ?? dashboard.retainedCash ?? demo.retainedCash;
   const ownerCapitalCentavos = (dashboard.ownerSummaries ?? []).reduce(
@@ -2855,6 +2868,7 @@ export default function Home() {
           </button>
         </form>
         </div>
+      </div>
         <section className="panel overflow-hidden">
           <div className="px-5 py-4">
             <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#8d90a2]">
@@ -2871,9 +2885,31 @@ export default function Home() {
                   nextBoxFundCentavos
               )}
             </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-[#8d90a2]">
+                Showing {inventoryHistoryRange === "week" ? "the last 7 days" : inventoryHistoryRange === "month" ? "the last 30 days" : "all history"}.
+              </p>
+              <label className="flex items-center gap-2 text-xs font-semibold text-[#64687b]">
+                <span>Filter</span>
+                <select
+                  aria-label="Filter inventory transaction history"
+                  value={inventoryHistoryRange}
+                  onChange={event =>
+                    setInventoryHistoryRange(
+                      event.target.value as typeof inventoryHistoryRange
+                    )
+                  }
+                  className="field h-9 min-w-[132px] py-1 text-xs font-semibold"
+                >
+                  <option value="week">Last 7 days</option>
+                  <option value="month">Last 30 days</option>
+                  <option value="all">All history</option>
+                </select>
+              </label>
+            </div>
           </div>
           <div className="divide-y divide-[#eeeef4]">
-            {(dashboard.inventoryHistoryByDay ?? []).map((day: any) => (
+            {filteredInventoryHistory.map((day: any) => (
               <div key={day.date} className="px-5 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -2931,9 +2967,13 @@ export default function Home() {
                 </div>
               </div>
             ))}
+            {!filteredInventoryHistory.length && (
+              <div className="px-5 py-8 text-center text-sm text-[#8d90a2]">
+                No inventory movements in this date range.
+              </div>
+            )}
           </div>
         </section>
-      </div>
     </>
   );
 

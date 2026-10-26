@@ -29,3 +29,11 @@ The viewer PIN now exposes only the shared Inventory page. Viewer sessions are a
 - [x] Preserve immutable record identifiers while correcting only descriptions, notes, and audit payload labels.
 - [x] Confirm the source tree and live user-visible text fields contain zero remaining matches.
 - [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.
+
+## Inventory history filters and layout — October 26, 2026
+
+- [x] Default shared Inventory history to the last 7 calendar days.
+- [x] Add optional Last 30 days and All history filters.
+- [x] Show a clear empty state when the selected range has no movements.
+- [x] Move Traceable Movements / Inventory transactions below the purchase and manual reconciliation forms at full page width.
+- [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.
