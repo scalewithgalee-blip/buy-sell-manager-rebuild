@@ -861,7 +861,10 @@ export default function Home() {
         : today();
     if (!startDate || !endDate || startDate > endDate) return [];
     return sales.filter(item => {
-      const saleDate = String(item.saleDate ?? "").slice(0, 10);
+      const saleDate =
+        item.saleDate instanceof Date
+          ? item.saleDate.toISOString().slice(0, 10)
+          : String(item.saleDate ?? "").slice(0, 10);
       return saleDate >= startDate && saleDate <= endDate;
     });
   }, [
