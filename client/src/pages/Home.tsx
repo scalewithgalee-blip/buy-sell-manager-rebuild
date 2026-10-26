@@ -749,8 +749,13 @@ export default function Home() {
     "all" | "active" | "voided"
   >("all");
   const [inventoryHistoryRange, setInventoryHistoryRange] = useState<
-    "week" | "month" | "all"
+    "week" | "month" | "custom" | "all"
   >("week");
+  const [inventoryHistoryCustomStart, setInventoryHistoryCustomStart] =
+    useState(daysAgo(6));
+  const [inventoryHistoryCustomEnd, setInventoryHistoryCustomEnd] = useState(
+    today()
+  );
   const [showRetainedCashBreakdown, setShowRetainedCashBreakdown] =
     useState(false);
   const [monthlyGoalToastShown, setMonthlyGoalToastShown] = useState(false);
@@ -820,10 +825,51 @@ export default function Home() {
       [key: string]: any;
     }>;
     if (inventoryHistoryRange === "all") return history;
-    const cutoff =
-      inventoryHistoryRange === "week" ? daysAgo(6) : daysAgo(29);
+    if (inventoryHistoryRange === "custom") {
+      if (
+        !inventoryHistoryCustomStart ||
+        !inventoryHistoryCustomEnd ||
+        inventoryHistoryCustomStart > inventoryHistoryCustomEnd
+      )
+        return [];
+      return history.filter(
+        day =>
+          day.date >= inventoryHistoryCustomStart &&
+          day.date <= inventoryHistoryCustomEnd
+      );
+    }
+    const cutoff = inventoryHistoryRange === "week" ? daysAgo(6) : daysAgo(29);
     return history.filter(day => day.date >= cutoff);
-  }, [dashboard.inventoryHistoryByDay, inventoryHistoryRange]);
+  }, [
+    dashboard.inventoryHistoryByDay,
+    inventoryHistoryCustomEnd,
+    inventoryHistoryCustomStart,
+    inventoryHistoryRange,
+  ]);
+  const filteredRecentSales = useMemo(() => {
+    const sales = (dashboard.recentSales ?? []) as Array<Record<string, any>>;
+    if (inventoryHistoryRange === "all") return sales;
+    const startDate =
+      inventoryHistoryRange === "custom"
+        ? inventoryHistoryCustomStart
+        : inventoryHistoryRange === "week"
+          ? daysAgo(6)
+          : daysAgo(29);
+    const endDate =
+      inventoryHistoryRange === "custom"
+        ? inventoryHistoryCustomEnd
+        : today();
+    if (!startDate || !endDate || startDate > endDate) return [];
+    return sales.filter(item => {
+      const saleDate = String(item.saleDate ?? "").slice(0, 10);
+      return saleDate >= startDate && saleDate <= endDate;
+    });
+  }, [
+    dashboard.recentSales,
+    inventoryHistoryCustomEnd,
+    inventoryHistoryCustomStart,
+    inventoryHistoryRange,
+  ]);
   const operatingCash =
     dashboard.operatingCash ?? dashboard.retainedCash ?? demo.retainedCash;
   const ownerCapitalCentavos = (dashboard.ownerSummaries ?? []).reduce(
@@ -2467,7 +2513,7 @@ export default function Home() {
         </section>
       )}
       <section className="panel mt-5 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#8d90a2]">
               Recent sales
@@ -2476,8 +2522,65 @@ export default function Home() {
               Immediate-payment transactions
             </h3>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-[#64687b]">Filter</span>
+            <select
+              aria-label="Filter recent sales"
+              value={inventoryHistoryRange}
+              onChange={event =>
+                setInventoryHistoryRange(
+                  event.target.value as typeof inventoryHistoryRange
+                )
+              }
+              className="field h-9 min-w-[132px] py-1 text-xs font-semibold"
+            >
+              <option value="week">Last 7 days</option>
+              <option value="month">Last 30 days</option>
+              <option value="custom">Custom dates</option>
+              <option value="all">All history</option>
+            </select>
+            <button
+              type="button"
+              className="btn-secondary h-9 px-3 text-xs"
+              onClick={() => {
+                setInventoryHistoryRange("week");
+                setInventoryHistoryCustomStart(daysAgo(6));
+                setInventoryHistoryCustomEnd(today());
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
         </div>
-        <SalesTable items={dashboard.recentSales} />
+        {inventoryHistoryRange === "custom" && (
+          <div className="border-t border-[#eeeef4] px-5 py-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="text-xs font-semibold text-[#64687b]">
+                From
+                <input
+                  type="date"
+                  value={inventoryHistoryCustomStart}
+                  onChange={event =>
+                    setInventoryHistoryCustomStart(event.target.value)
+                  }
+                  className="field mt-1 h-9 text-xs"
+                />
+              </label>
+              <label className="text-xs font-semibold text-[#64687b]">
+                To
+                <input
+                  type="date"
+                  value={inventoryHistoryCustomEnd}
+                  onChange={event =>
+                    setInventoryHistoryCustomEnd(event.target.value)
+                  }
+                  className="field mt-1 h-9 text-xs"
+                />
+              </label>
+            </div>
+          </div>
+        )}
+        <SalesTable items={filteredRecentSales} />
       </section>
     </>
   );
@@ -2887,10 +2990,17 @@ export default function Home() {
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-[#8d90a2]">
-                Showing {inventoryHistoryRange === "week" ? "the last 7 days" : inventoryHistoryRange === "month" ? "the last 30 days" : "all history"}.
+                Showing{" "}
+                {inventoryHistoryRange === "week"
+                  ? "the last 7 days"
+                  : inventoryHistoryRange === "month"
+                    ? "the last 30 days"
+                    : inventoryHistoryRange === "custom"
+                      ? `${inventoryHistoryCustomStart || "start date"} to ${inventoryHistoryCustomEnd || "end date"}`
+                      : "all history"}
+                .
               </p>
-              <label className="flex items-center gap-2 text-xs font-semibold text-[#64687b]">
-                <span>Filter</span>
+              <div className="flex flex-wrap items-center gap-2">
                 <select
                   aria-label="Filter inventory transaction history"
                   value={inventoryHistoryRange}
@@ -2903,10 +3013,56 @@ export default function Home() {
                 >
                   <option value="week">Last 7 days</option>
                   <option value="month">Last 30 days</option>
+                  <option value="custom">Custom dates</option>
                   <option value="all">All history</option>
                 </select>
-              </label>
+                <button
+                  type="button"
+                  className="btn-secondary h-9 px-3 text-xs"
+                  onClick={() => {
+                    setInventoryHistoryRange("week");
+                    setInventoryHistoryCustomStart(daysAgo(6));
+                    setInventoryHistoryCustomEnd(today());
+                  }}
+                >
+                  Clear filters
+                </button>
+              </div>
             </div>
+            {inventoryHistoryRange === "custom" && (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <label className="text-xs font-semibold text-[#64687b]">
+                  From
+                  <input
+                    type="date"
+                    value={inventoryHistoryCustomStart}
+                    onChange={event =>
+                      setInventoryHistoryCustomStart(event.target.value)
+                    }
+                    className="field mt-1 h-9 text-xs"
+                  />
+                </label>
+                <label className="text-xs font-semibold text-[#64687b]">
+                  To
+                  <input
+                    type="date"
+                    value={inventoryHistoryCustomEnd}
+                    onChange={event =>
+                      setInventoryHistoryCustomEnd(event.target.value)
+                    }
+                    className="field mt-1 h-9 text-xs"
+                  />
+                </label>
+              </div>
+            )}
+            {inventoryHistoryRange === "custom" &&
+              inventoryHistoryCustomStart &&
+              inventoryHistoryCustomEnd &&
+              inventoryHistoryCustomStart > inventoryHistoryCustomEnd && (
+                <p className="mt-2 text-xs font-semibold text-[#9d3f35]">
+                  The start date must be on or before the end date.
+                </p>
+              )}
           </div>
           <div className="divide-y divide-[#eeeef4]">
             {filteredInventoryHistory.map((day: any) => (

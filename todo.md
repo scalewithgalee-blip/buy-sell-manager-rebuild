@@ -37,3 +37,11 @@ The viewer PIN now exposes only the shared Inventory page. Viewer sessions are a
 - [x] Show a clear empty state when the selected range has no movements.
 - [x] Move Traceable Movements / Inventory transactions below the purchase and manual reconciliation forms at full page width.
 - [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.
+
+## Custom history filters — October 26, 2026
+
+- [x] Add Custom dates with start and end inputs to Inventory history.
+- [x] Apply the same selected range to the Recent Sales table.
+- [x] Add Clear filters buttons that restore Last 7 days and reset dates.
+- [x] Validate reversed custom ranges with a clear inline warning and empty results.
+- [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.
