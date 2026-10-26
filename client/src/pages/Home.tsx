@@ -2971,7 +2971,6 @@ export default function Home() {
           </button>
         </form>
         </div>
-      </div>
         <section className="panel overflow-hidden">
           <div className="px-5 py-4">
             <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#8d90a2]">
@@ -3130,6 +3129,7 @@ export default function Home() {
             )}
           </div>
         </section>
+      </div>
     </>
   );
 

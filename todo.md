@@ -45,3 +45,10 @@ The viewer PIN now exposes only the shared Inventory page. Viewer sessions are a
 - [x] Add Clear filters buttons that restore Last 7 days and reset dates.
 - [x] Validate reversed custom ranges with a clear inline warning and empty results.
 - [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.
+
+## Inventory history placement correction — October 26, 2026
+
+- [x] Keep the new custom date-range and Clear filters controls.
+- [x] Apply the synchronized filter to Recent Sales as well as Inventory transactions.
+- [x] Place Traceable Movements / Inventory transactions in the right-hand column beside the purchase and reconciliation forms, matching the requested layout.
+- [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.
