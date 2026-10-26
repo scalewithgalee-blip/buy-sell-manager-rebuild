@@ -988,7 +988,7 @@ export default function Home() {
         beforeUnits + variables.unitsSold >= targetUnits
       )
         toast.success(
-          `Weekly goal reached: ${number(beforeUnits + variables.unitsSold)} of ${number(targetUnits)} packs/reams sold.`
+          `Weekly goal reached: ${number(beforeUnits + variables.unitsSold)} of ${number(targetUnits)} units sold.`
         );
       setSale({
         date: today(),
@@ -1642,11 +1642,11 @@ export default function Home() {
         />
         <MetricCard
           label="Weekly target"
-          info={`Tracks Monday-to-Sunday packs/reams sold against your saved ${number(weeklyUnitsTarget)}-unit weekly target. Change the target in Settings.`}
+          info={`Tracks Monday-to-Sunday units sold against your saved ${number(weeklyUnitsTarget)}-unit weekly target. Change the target in Settings.`}
           value={`${number(dashboard.periods.week.unitsSold)} of ${number(weeklyUnitsTarget)}`}
           hint={
             weeklyUnitsRemaining > 0
-              ? `${number(weeklyUnitsRemaining)} packs/reams to go`
+              ? `${number(weeklyUnitsRemaining)} units to go`
               : "Weekly goal reached"
           }
           progress={weeklyTargetProgress}
@@ -1991,9 +1991,9 @@ export default function Home() {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-[#8d90a2]">Total packs/reams sold</p>
+                <p className="text-xs text-[#8d90a2]">Total units sold</p>
                 <p className="mt-1 font-semibold text-[#17182b]">
-                  {number(rhythmMetrics.unitsSold)} packs/reams
+                  {number(rhythmMetrics.unitsSold)} units
                 </p>
                 {rhythmPeriod === "week" && (
                   <p className="mt-1 text-[11px] leading-4 text-[#8d90a2]">
@@ -2207,7 +2207,7 @@ export default function Home() {
         eyebrow="Daily sales"
         title="Enter sales. Everything else is automatic."
         info="Customers pay immediately. Enter units sold and the app calculates revenue, cost, gross profit, and owner shares."
-        copy="Enter the date and packs/reams sold. Auto-calculate expected cash and gross earnings, or turn it off to enter a manual cash variance."
+        copy="Enter the date and units sold. Auto-calculate expected cash and gross earnings, or turn it off to enter a manual cash variance."
       />
       <div className="grid gap-5 xl:grid-cols-[.9fr_1.1fr]">
         <form
@@ -2217,7 +2217,7 @@ export default function Home() {
         >
           <div className="mb-5 rounded-lg border border-[#e2defe] bg-[#f3f1ff] px-3 py-2.5 text-sm text-[#5b4de1]">
             <Zap className="mr-2 inline h-4 w-4" />
-            Cash-only sale. Each pack/ream is ₱700 cost + ₱30 profit = ₱730 cash
+            Cash-only sale. Each unit is ₱700 cost + ₱30 profit = ₱730 cash
             collected. Future gross profit is split between Gale and Nikki based
             on their current capital contribution; Nikki's Dad receives 0% from
             daily sales.
@@ -2243,8 +2243,8 @@ export default function Home() {
               </div>
             </div>
             <div>
-              <Label info="Enter the number of individual packs or reams sold. Revenue, cost, and profit are calculated from this quantity.">
-                reams / packs sold
+              <Label info="Enter the number of individual units sold. Revenue, cost, and profit are calculated from this quantity.">
+                units sold
               </Label>
               <input
                 required
@@ -2295,8 +2295,8 @@ export default function Home() {
             </label>
             <p className="mt-1 pl-7 text-xs leading-5 text-[#8d90a2]">
               {autoCalculateCash
-                ? "Expected cash is filled as packs/reams sold × (₱700 cost + ₱30 profit) = ₱730 per pack/ream. Turn this off for shortages, discounts, or other variances."
-                : "Manual cash mode is on. Enter what was actually collected; earnings still calculate from the packs/reams sold."}
+                ? "Expected cash is filled as units sold × (₱700 cost + ₱30 profit) = ₱730 per unit. Turn this off for shortages, discounts, or other variances."
+                : "Manual cash mode is on. Enter what was actually collected; earnings still calculate from the units sold."}
             </p>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div className="rounded-md bg-white p-3">
@@ -2615,7 +2615,7 @@ export default function Home() {
               />
             </div>
             <div>
-              <Label info="The number of individual packs or reams contained in one box.">
+              <Label info="The number of individual units contained in one box.">
                 Units per box
               </Label>
               <div className="mt-1 flex h-11 items-center rounded-md bg-[#f7f7fb] px-3 text-sm font-semibold text-[#64687b]">
@@ -3755,11 +3755,11 @@ export default function Home() {
                         <td className="px-5 py-4 font-semibold text-[#17182b]">
                           {week.targetUnits === null
                             ? "Not recorded"
-                            : `${number(week.targetUnits)} packs/reams`}
+                            : `${number(week.targetUnits)} units`}
                         </td>
                         <td className="px-5 py-4">
                           <p className="font-semibold text-[#17182b]">
-                            {number(week.unitsSold)} packs/reams
+                            {number(week.unitsSold)} units
                           </p>
                           {week.completionPercent !== null && (
                             <div className="mt-2 h-1.5 w-28 overflow-hidden rounded-full bg-[#ebeaf4]">
@@ -3837,12 +3837,12 @@ export default function Home() {
                         value={
                           week.targetUnits === null
                             ? "Not recorded"
-                            : `${number(week.targetUnits)} packs/reams`
+                            : `${number(week.targetUnits)} units`
                         }
                       />
                       <LedgerStat
                         label="Sold"
-                        value={`${number(week.unitsSold)} packs/reams`}
+                        value={`${number(week.unitsSold)} units`}
                         emphasis
                       />
                     </div>
@@ -3859,7 +3859,7 @@ export default function Home() {
                         <p className="mt-1.5 text-xs text-[#64687b]">
                           {week.targetReached
                             ? `Goal reached • ${number(week.completionPercent, 1)}%`
-                            : `${number(week.unitsRemaining ?? 0)} packs/reams to go • ${number(week.completionPercent, 1)}%`}
+                            : `${number(week.unitsRemaining ?? 0)} units to go • ${number(week.completionPercent, 1)}%`}
                         </p>
                       </div>
                     )}
@@ -4033,8 +4033,8 @@ export default function Home() {
               />
             </div>
             <div>
-              <Label info="Sets the packs/reams goal for each Monday-to-Sunday sales week. The Sales Rhythm card resets progress every Monday.">
-                Weekly packs/reams target
+              <Label info="Sets the units goal for each Monday-to-Sunday sales week. The Sales Rhythm card resets progress every Monday.">
+                Weekly units target
               </Label>
               <input
                 required
@@ -4296,7 +4296,7 @@ export default function Home() {
               />
             </div>
             <div>
-              <Label>Extra units / reams</Label>
+              <Label>Extra units</Label>
               <input
                 min="0"
                 step="1"
@@ -4413,7 +4413,7 @@ export default function Home() {
               />
             </div>
             <div>
-              <Label>Units / reams sold</Label>
+              <Label>Units sold</Label>
               <input
                 required
                 min="1"

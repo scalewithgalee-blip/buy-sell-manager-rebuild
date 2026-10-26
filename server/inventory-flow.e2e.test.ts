@@ -166,7 +166,7 @@ describe("inventory funding flow: sale to replacement purchase", () => {
           transactionType: "adjustment",
           fundingSource: "other",
           description:
-            "Physical inventory reconciliation — 6 boxes / 300 reams",
+            "Physical inventory reconciliation — 6 boxes / 300 units",
           unitsDelta: -125,
           costPerUnitCentavos: 70_000,
         },

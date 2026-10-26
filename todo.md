@@ -21,3 +21,11 @@ The viewer PIN now exposes only the shared Inventory page. Viewer sessions are a
 - [x] Create the October 26 weekly target snapshot through the normal dashboard initialization path.
 - [x] Add regression coverage for Monday rollover before UTC midnight.
 - [x] Validate TypeScript, all 54 tests, production build, diff cleanliness, and live dashboard output.
+
+## Neutral unit terminology — October 26, 2026
+
+- [x] Remove all standalone “ream” and “reams” wording from the application source, UI labels, alerts, settings, reports, tests, and historical user-visible reconciliation text.
+- [x] Replace the removed terminology with “unit” or “units” without changing calculations, conversion values, inventory totals, or financial records.
+- [x] Preserve immutable record identifiers while correcting only descriptions, notes, and audit payload labels.
+- [x] Confirm the source tree and live user-visible text fields contain zero remaining matches.
+- [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.

@@ -2549,7 +2549,7 @@ export function calculateBusinessAlerts(input: {
       kind: "goal_reached",
       tone: "success",
       title: "Weekly goal reached",
-      message: `${input.currentWeekUnitsSold.toLocaleString("en-PH")} packs/reams sold against the ${input.weeklyTargetUnits.toLocaleString("en-PH")} target.`,
+      message: `${input.currentWeekUnitsSold.toLocaleString("en-PH")} units sold against the ${input.weeklyTargetUnits.toLocaleString("en-PH")} target.`,
       date: dayKey(input.now),
     });
   }
