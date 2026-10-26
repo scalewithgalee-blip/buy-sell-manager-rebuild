@@ -2859,6 +2859,7 @@ export default function Home() {
               : "Add boxes to inventory"}
           </button>
         </form>
+        </div>
         <form
           onSubmit={e => {
             e.preventDefault();
@@ -3129,7 +3130,6 @@ export default function Home() {
             )}
           </div>
         </section>
-      </div>
     </>
   );
 

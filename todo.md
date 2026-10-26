@@ -52,3 +52,10 @@ The viewer PIN now exposes only the shared Inventory page. Viewer sessions are a
 - [x] Apply the synchronized filter to Recent Sales as well as Inventory transactions.
 - [x] Place Traceable Movements / Inventory transactions in the right-hand column beside the purchase and reconciliation forms, matching the requested layout.
 - [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.
+
+## Final Inventory column correction — October 26, 2026
+
+- [x] Place Inventory purchase on the left and Manual reconciliation — Confirm stock and cash left on the right.
+- [x] Keep Traceable Movements / Inventory transactions below the two form panels.
+- [x] Preserve the custom and default date filters for both Inventory history and Recent Sales.
+- [x] Validate TypeScript, all 54 tests, production build, and diff cleanliness.
