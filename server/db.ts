@@ -169,6 +169,34 @@ export function calculateSeparateInventoryBalances(
   };
 }
 
+export function calculateSeparateInventoryPeriodMetrics(
+  rows: Array<{
+    transactionDate?: Date | string;
+    transactionType: string;
+    unitsDelta: number;
+    costPerUnitCentavos: number;
+    revenueCentavos: number;
+  }>,
+  start: Date,
+  end: Date
+) {
+  const sales = rows.filter(row => {
+    if (row.transactionType !== "sale" || !row.transactionDate) return false;
+    const date = new Date(row.transactionDate);
+    return date >= start && date < end;
+  });
+  const revenueCentavos = sum(sales.map(row => Math.max(0, row.revenueCentavos)));
+  const cogsCentavos = sum(
+    sales.map(row => Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos)
+  );
+  return {
+    unitsSold: sum(sales.map(row => Math.max(0, -row.unitsDelta))),
+    revenueCentavos,
+    cogsCentavos,
+    grossProfitCentavos: revenueCentavos - cogsCentavos,
+  };
+}
+
 export async function getSeparateInventoryData(userId: number) {
   void userId;
   const db = await getDb();
@@ -184,8 +212,32 @@ export async function getSeparateInventoryData(userId: number) {
     db.select().from(businessSettings).limit(1),
   ]);
   const settings = settingsRows[0];
+  const now = businessNow();
+  const weekRanges = getMondayWeekRanges(now);
+  const currentWeekMetrics = calculateSeparateInventoryPeriodMetrics(
+    rows,
+    weekRanges.currentWeekStart,
+    weekRanges.currentWeekEnd
+  );
+  const previousWeekMetrics = calculateSeparateInventoryPeriodMetrics(
+    rows,
+    weekRanges.previousWeekStart,
+    weekRanges.previousWeekEnd
+  );
   return {
     rows: rows.slice(0, 200),
+    weeklyProfit: {
+      current: {
+        ...currentWeekMetrics,
+        startDate: dayKey(weekRanges.currentWeekStart),
+        endDate: dayKey(new Date(weekRanges.currentWeekEnd.getTime() - 86_400_000)),
+      },
+      previous: {
+        ...previousWeekMetrics,
+        startDate: dayKey(weekRanges.previousWeekStart),
+        endDate: dayKey(new Date(weekRanges.previousWeekEnd.getTime() - 86_400_000)),
+      },
+    },
     ...calculateSeparateInventoryBalances(
       rows,
       settings?.unitsPerBox ?? 50,

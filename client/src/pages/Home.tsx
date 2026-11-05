@@ -929,6 +929,24 @@ export default function Home() {
     cashBalanceCentavos: 0,
     totalWithdrawalsCentavos: 0,
     withdrawalTotalsByCategory: [],
+    weeklyProfit: {
+      current: {
+        unitsSold: 0,
+        revenueCentavos: 0,
+        cogsCentavos: 0,
+        grossProfitCentavos: 0,
+        startDate: today(),
+        endDate: today(),
+      },
+      previous: {
+        unitsSold: 0,
+        revenueCentavos: 0,
+        cogsCentavos: 0,
+        grossProfitCentavos: 0,
+        startDate: daysAgo(7),
+        endDate: daysAgo(1),
+      },
+    },
   }) as any;
   const filteredSeparateRows = useMemo(() => {
     const search = separateAuditFilter.search.trim().toLowerCase();
@@ -4404,13 +4422,70 @@ export default function Home() {
           icon={Wallet}
         />
         <MetricCard
-          label="Gross profit"
+          label="All-time gross profit"
           value={peso(separateInventory.grossProfitCentavos)}
           hint={`${number(separateInventory.totalSoldUnits)} units sold`}
           tone="coral"
           icon={ReceiptText}
         />
       </div>
+      <section className="panel mt-5 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6d5dfc]">
+              Weekly performance
+            </p>
+            <h3 className="mt-1 text-xl font-semibold text-[#17182b]">
+              Personal profit by week
+            </h3>
+            <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
+              Gross profit uses the same Monday-to-today and prior Monday–Sunday
+              reporting windows as the shared ledger.
+            </p>
+          </div>
+          <ReceiptText className="h-7 w-7 text-[#6d5dfc]" />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {[
+            {
+              label: "This week",
+              item: separateInventory.weeklyProfit.current,
+              tone: "bg-[#f0efff] text-[#5b4de1]",
+            },
+            {
+              label: "Last week",
+              item: separateInventory.weeklyProfit.previous,
+              tone: "bg-[#f7f7fb] text-[#17182b]",
+            },
+          ].map(({ label, item, tone }) => (
+            <div key={label} className={`rounded-xl p-4 ${tone}`}>
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] opacity-65">
+                {label}
+              </p>
+              <p className="mt-2 text-2xl font-semibold">
+                {peso(item.grossProfitCentavos)}
+              </p>
+              <p className="mt-1 text-xs opacity-70">
+                {number(item.unitsSold)} units sold · {prettyDate(item.startDate)} – {prettyDate(item.endDate)}
+              </p>
+            </div>
+          ))}
+          <div className="rounded-xl bg-[#fff7ed] p-4 text-[#a05a16]">
+            <p className="text-[10px] font-bold uppercase tracking-[.12em] opacity-70">
+              Week-over-week change
+            </p>
+            <p className="mt-2 text-2xl font-semibold">
+              {signedPeso(
+                separateInventory.weeklyProfit.current.grossProfitCentavos -
+                  separateInventory.weeklyProfit.previous.grossProfitCentavos
+              )}
+            </p>
+            <p className="mt-1 text-xs opacity-75">
+              Current week less last week
+            </p>
+          </div>
+        </div>
+      </section>
       <div className="mt-5 rounded-2xl border border-[#ded9ff] bg-[#faf9ff] p-4 text-sm text-[#4f477f]">
         <div className="flex items-start gap-3">
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#6d5dfc]" />

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateNextBoxFundBalance,
   calculateSeparateInventoryBalances,
+  calculateSeparateInventoryPeriodMetrics,
 } from "./db";
 
 describe("separate inventory ledger isolation", () => {
@@ -79,5 +80,40 @@ describe("separate inventory ledger isolation", () => {
     expect(
       calculateNextBoxFundBalance({ sales: [], inventory: [] }).availableCentavos
     ).toBe(0);
+  });
+
+  it("reports personal gross profit by the same bounded weekly windows as shared reports", () => {
+    const rows = [
+      {
+        transactionDate: new Date("2026-11-02T12:00:00.000Z"),
+        transactionType: "sale",
+        unitsDelta: -10,
+        costPerUnitCentavos: 70_000,
+        revenueCentavos: 1_000_000,
+      },
+      {
+        transactionDate: new Date("2026-10-25T12:00:00.000Z"),
+        transactionType: "sale",
+        unitsDelta: -5,
+        costPerUnitCentavos: 70_000,
+        revenueCentavos: 450_000,
+      },
+    ];
+
+    const thisWeek = calculateSeparateInventoryPeriodMetrics(
+      rows,
+      new Date("2026-11-02T00:00:00.000Z"),
+      new Date("2026-11-06T00:00:00.000Z")
+    );
+    const lastWeek = calculateSeparateInventoryPeriodMetrics(
+      rows,
+      new Date("2026-10-26T00:00:00.000Z"),
+      new Date("2026-11-02T00:00:00.000Z")
+    );
+
+    expect(thisWeek.grossProfitCentavos).toBe(300_000);
+    expect(thisWeek.unitsSold).toBe(10);
+    expect(lastWeek.grossProfitCentavos).toBe(0);
+    expect(lastWeek.unitsSold).toBe(0);
   });
 });
