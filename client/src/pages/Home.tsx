@@ -692,7 +692,11 @@ export default function Home() {
   });
   const [separateAdjustment, setSeparateAdjustment] = useState({
     date: today(),
-    type: "adjustment" as "adjustment" | "loss" | "cash_adjustment",
+    type: "adjustment" as
+      | "adjustment"
+      | "loss"
+      | "cash_adjustment"
+      | "personal_expense",
     unitsDelta: "",
     cashDelta: "",
     costPerUnit: "700",
@@ -935,6 +939,8 @@ export default function Home() {
         revenueCentavos: 0,
         cogsCentavos: 0,
         grossProfitCentavos: 0,
+        expensesCentavos: 0,
+        netProfitCentavos: 0,
         startDate: today(),
         endDate: today(),
       },
@@ -943,6 +949,8 @@ export default function Home() {
         revenueCentavos: 0,
         cogsCentavos: 0,
         grossProfitCentavos: 0,
+        expensesCentavos: 0,
+        netProfitCentavos: 0,
         startDate: daysAgo(7),
         endDate: daysAgo(1),
       },
@@ -4439,8 +4447,8 @@ export default function Home() {
               Personal profit by week
             </h3>
             <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
-              Gross profit uses the same Monday-to-today and prior Monday–Sunday
-              reporting windows as the shared ledger.
+              Net profit is gross profit less personal expenses, using the same
+              Monday-to-today and prior Monday–Sunday windows as the shared ledger.
             </p>
           </div>
           <ReceiptText className="h-7 w-7 text-[#6d5dfc]" />
@@ -4463,7 +4471,10 @@ export default function Home() {
                 {label}
               </p>
               <p className="mt-2 text-2xl font-semibold">
-                {peso(item.grossProfitCentavos)}
+                {peso(item.netProfitCentavos)}
+              </p>
+              <p className="mt-1 text-xs opacity-70">
+                Gross {peso(item.grossProfitCentavos)} · Expenses {peso(item.expensesCentavos)}
               </p>
               <p className="mt-1 text-xs opacity-70">
                 {number(item.unitsSold)} units sold · {prettyDate(item.startDate)} – {prettyDate(item.endDate)}
@@ -4476,12 +4487,12 @@ export default function Home() {
             </p>
             <p className="mt-2 text-2xl font-semibold">
               {signedPeso(
-                separateInventory.weeklyProfit.current.grossProfitCentavos -
-                  separateInventory.weeklyProfit.previous.grossProfitCentavos
+                separateInventory.weeklyProfit.current.netProfitCentavos -
+                  separateInventory.weeklyProfit.previous.netProfitCentavos
               )}
             </p>
             <p className="mt-1 text-xs opacity-75">
-              Current week less last week
+              Net profit: current week less last week
             </p>
           </div>
         </div>
@@ -4869,17 +4880,20 @@ export default function Home() {
             event.preventDefault();
             const unitsDelta = Number(separateAdjustment.unitsDelta) || 0;
             const cashDelta = Number(separateAdjustment.cashDelta) || 0;
-            if (separateAdjustment.type !== "cash_adjustment" && unitsDelta === 0)
+            const cashOnly =
+              separateAdjustment.type === "cash_adjustment" ||
+              separateAdjustment.type === "personal_expense";
+            if (!cashOnly && unitsDelta === 0)
               return toast.error("Enter a non-zero unit adjustment.");
-            if (separateAdjustment.type === "cash_adjustment" && cashDelta === 0)
+            if (cashOnly && cashDelta === 0)
               return toast.error("Enter a non-zero cash adjustment.");
             if (!separateAdjustment.description.trim())
               return toast.error("Describe the adjustment for the audit trail.");
             addSeparateAdjustment.mutate({
               date: separateAdjustment.date,
               type: separateAdjustment.type,
-              unitsDelta: separateAdjustment.type === "cash_adjustment" ? 0 : unitsDelta,
-              cashDeltaPesos: separateAdjustment.type === "cash_adjustment" ? cashDelta : 0,
+              unitsDelta: cashOnly ? 0 : unitsDelta,
+              cashDeltaPesos: cashOnly ? cashDelta : 0,
               costPerUnitPesos: Number(separateAdjustment.costPerUnit) || 0,
               description: separateAdjustment.description,
               notes: separateAdjustment.notes || undefined,
@@ -4890,7 +4904,7 @@ export default function Home() {
             Corrections
           </p>
           <h3 className="mt-1 text-xl font-semibold text-[#17182b]">
-            Stock or cash adjustment
+            Stock, cash, or expense entry
           </h3>
           <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
             Use an adjustment instead of rewriting history when your physical
@@ -4917,6 +4931,7 @@ export default function Home() {
                 <option value="adjustment">Inventory count adjustment</option>
                 <option value="loss">Personal inventory loss</option>
                 <option value="cash_adjustment">Personal cash adjustment</option>
+                <option value="personal_expense">Personal expense (reduces net profit)</option>
               </select>
             </div>
             <div>
@@ -4925,7 +4940,10 @@ export default function Home() {
                 min="-10000000"
                 step="1"
                 type="number"
-                disabled={separateAdjustment.type === "cash_adjustment"}
+                disabled={
+                  separateAdjustment.type === "cash_adjustment" ||
+                  separateAdjustment.type === "personal_expense"
+                }
                 value={separateAdjustment.unitsDelta}
                 onChange={event => setSeparateAdjustment({ ...separateAdjustment, unitsDelta: event.target.value })}
                 placeholder="+50 or −5"
@@ -4937,7 +4955,10 @@ export default function Home() {
               <input
                 step="0.01"
                 type="number"
-                disabled={separateAdjustment.type !== "cash_adjustment"}
+                disabled={
+                  separateAdjustment.type !== "cash_adjustment" &&
+                  separateAdjustment.type !== "personal_expense"
+                }
                 value={separateAdjustment.cashDelta}
                 onChange={event => setSeparateAdjustment({ ...separateAdjustment, cashDelta: event.target.value })}
                 placeholder="+1000 or −500"
@@ -4988,6 +5009,7 @@ export default function Home() {
                 <option value="adjustment">Adjustments</option>
                 <option value="loss">Losses</option>
                 <option value="cash_adjustment">Cash adjustments</option>
+                <option value="personal_expense">Personal expenses</option>
               </select>
               <select
                 value={separateAuditFilter.category}
@@ -5048,7 +5070,11 @@ export default function Home() {
                 </thead>
                 <tbody className="divide-y divide-[#f0f0f5]">
                   {filteredSeparateRows.map((row: any) => {
-                    const profit = row.revenueCentavos - Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos;
+                    const profit =
+                      row.transactionType === "personal_expense"
+                        ? -Math.abs(row.cashCollectedCentavos)
+                        : row.revenueCentavos -
+                          Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos;
                     return (
                       <tr key={row.id} className="text-[#64687b]">
                         <td className="whitespace-nowrap px-5 py-3">{prettyDate(row.transactionDate)}</td>
@@ -5059,7 +5085,7 @@ export default function Home() {
                         </td>
                         <td className={`px-5 py-3 text-right font-semibold ${row.unitsDelta < 0 ? "text-[#9d3f35]" : "text-[#5b4de1]"}`}>{row.unitsDelta > 0 ? "+" : ""}{number(row.unitsDelta)}</td>
                         <td className={`px-5 py-3 text-right font-semibold ${row.cashCollectedCentavos < 0 ? "text-[#9d3f35]" : "text-[#5b4de1]"}`}>{row.cashCollectedCentavos > 0 ? "+" : ""}{peso(row.cashCollectedCentavos)}</td>
-                        <td className="px-5 py-3 text-right font-semibold text-[#5b4de1]">{profit ? peso(profit) : "—"}</td>
+                        <td className={`px-5 py-3 text-right font-semibold ${profit < 0 ? "text-[#9d3f35]" : "text-[#5b4de1]"}`}>{profit ? peso(profit) : "—"}</td>
                       </tr>
                     );
                   })}

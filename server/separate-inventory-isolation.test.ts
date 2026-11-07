@@ -90,6 +90,7 @@ describe("separate inventory ledger isolation", () => {
         unitsDelta: -10,
         costPerUnitCentavos: 70_000,
         revenueCentavos: 1_000_000,
+        cashCollectedCentavos: 1_000_000,
       },
       {
         transactionDate: new Date("2026-10-25T12:00:00.000Z"),
@@ -97,6 +98,15 @@ describe("separate inventory ledger isolation", () => {
         unitsDelta: -5,
         costPerUnitCentavos: 70_000,
         revenueCentavos: 450_000,
+        cashCollectedCentavos: 450_000,
+      },
+      {
+        transactionDate: new Date("2026-11-04T12:00:00.000Z"),
+        transactionType: "personal_expense",
+        unitsDelta: 0,
+        costPerUnitCentavos: 0,
+        revenueCentavos: 0,
+        cashCollectedCentavos: -300_000,
       },
     ];
 
@@ -112,6 +122,8 @@ describe("separate inventory ledger isolation", () => {
     );
 
     expect(thisWeek.grossProfitCentavos).toBe(300_000);
+    expect(thisWeek.expensesCentavos).toBe(300_000);
+    expect(thisWeek.netProfitCentavos).toBe(0);
     expect(thisWeek.unitsSold).toBe(10);
     expect(lastWeek.grossProfitCentavos).toBe(0);
     expect(lastWeek.unitsSold).toBe(0);

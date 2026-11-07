@@ -334,6 +334,7 @@ export const separateInventoryTransactions = mysqlTable(
       "loss",
       "cash_adjustment",
       "personal_withdrawal",
+      "personal_expense",
     ]).notNull(),
     withdrawalCategory: varchar("withdrawalCategory", { length: 80 }),
     unitsDelta: int("unitsDelta").notNull().default(0),

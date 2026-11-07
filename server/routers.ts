@@ -159,7 +159,12 @@ export const appRouter = router({
       .input(
         z.object({
           date: day,
-          type: z.enum(["adjustment", "loss", "cash_adjustment"]),
+          type: z.enum([
+            "adjustment",
+            "loss",
+            "cash_adjustment",
+            "personal_expense",
+          ]),
           unitsDelta: z.number().int().min(-10_000_000).max(10_000_000),
           cashDeltaPesos: z.number().max(10_000_000_000),
           costPerUnitPesos: z.number().nonnegative().max(10_000_000),

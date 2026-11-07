@@ -1,0 +1,1 @@
+ALTER TABLE `separateInventoryTransactions` MODIFY COLUMN `separateInventoryTransactionType` enum('purchase','sale','adjustment','loss','cash_adjustment','personal_withdrawal','personal_expense') NOT NULL;

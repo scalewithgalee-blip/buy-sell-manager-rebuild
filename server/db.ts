@@ -176,6 +176,7 @@ export function calculateSeparateInventoryPeriodMetrics(
     unitsDelta: number;
     costPerUnitCentavos: number;
     revenueCentavos: number;
+    cashCollectedCentavos: number;
   }>,
   start: Date,
   end: Date
@@ -189,11 +190,23 @@ export function calculateSeparateInventoryPeriodMetrics(
   const cogsCentavos = sum(
     sales.map(row => Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos)
   );
+  const expensesCentavos = sum(
+    rows
+      .filter(row => {
+        if (row.transactionType !== "personal_expense" || !row.transactionDate)
+          return false;
+        const date = new Date(row.transactionDate);
+        return date >= start && date < end;
+      })
+      .map(row => Math.abs(row.cashCollectedCentavos))
+  );
   return {
     unitsSold: sum(sales.map(row => Math.max(0, -row.unitsDelta))),
     revenueCentavos,
     cogsCentavos,
     grossProfitCentavos: revenueCentavos - cogsCentavos,
+    expensesCentavos,
+    netProfitCentavos: revenueCentavos - cogsCentavos - expensesCentavos,
   };
 }
 
@@ -393,7 +406,7 @@ export async function addSeparateInventoryAdjustment(
   userId: number,
   input: {
     date: string;
-    type: "adjustment" | "loss" | "cash_adjustment";
+    type: "adjustment" | "loss" | "cash_adjustment" | "personal_expense";
     unitsDelta: number;
     cashDeltaPesos: number;
     costPerUnitPesos: number;
@@ -404,7 +417,9 @@ export async function addSeparateInventoryAdjustment(
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
   const existing = await getSeparateInventoryData(userId);
-  if (input.unitsDelta < 0 && Math.abs(input.unitsDelta) > existing.currentUnits)
+  const cashOnly =
+    input.type === "cash_adjustment" || input.type === "personal_expense";
+  if (!cashOnly && input.unitsDelta < 0 && Math.abs(input.unitsDelta) > existing.currentUnits)
     throw new Error(`The adjustment cannot remove more than ${existing.currentUnits} available units.`);
   const transactionDate = dateAtNoonUtc(input.date);
   const inserted = await db.insert(separateInventoryTransactions).values({
