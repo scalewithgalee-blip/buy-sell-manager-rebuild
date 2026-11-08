@@ -200,13 +200,32 @@ export function calculateSeparateInventoryPeriodMetrics(
       })
       .map(row => Math.abs(row.cashCollectedCentavos))
   );
+  const distributedCentavos = sum(
+    rows
+      .filter(row => {
+        if (
+          row.transactionType !== "personal_profit_distribution" ||
+          !row.transactionDate
+        )
+          return false;
+        const date = new Date(row.transactionDate);
+        return date >= start && date < end;
+      })
+      .map(row => Math.abs(row.cashCollectedCentavos))
+  );
+  const netProfitCentavos = revenueCentavos - cogsCentavos - expensesCentavos;
   return {
     unitsSold: sum(sales.map(row => Math.max(0, -row.unitsDelta))),
     revenueCentavos,
     cogsCentavos,
     grossProfitCentavos: revenueCentavos - cogsCentavos,
     expensesCentavos,
-    netProfitCentavos: revenueCentavos - cogsCentavos - expensesCentavos,
+    netProfitCentavos,
+    distributedCentavos,
+    availableToDistributeCentavos: Math.max(
+      0,
+      netProfitCentavos - distributedCentavos
+    ),
   };
 }
 
@@ -339,6 +358,75 @@ export async function addSeparateInventoryWithdrawal(
     `Recorded a personal withdrawal under ${input.category}.`
   );
   return { id, recordCode, amountCentavos, category: input.category };
+}
+
+export async function addSeparateInventoryProfitDistribution(
+  userId: number,
+  input: { date: string; amountPesos: number; notes?: string }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  const amountCentavos = pesoToCentavos(input.amountPesos);
+  if (amountCentavos <= 0)
+    throw new Error("Profit distribution must be greater than zero.");
+
+  const existing = await getSeparateInventoryData(userId);
+  const availableCentavos =
+    existing.weeklyProfit.current.availableToDistributeCentavos;
+  if (amountCentavos > availableCentavos)
+    throw new Error(
+      `Only ₱${(availableCentavos / 100).toLocaleString("en-PH", {
+        minimumFractionDigits: 2,
+      })} of this week's personal profit is available to distribute.`
+    );
+
+  const distributionDate = dateAtNoonUtc(input.date);
+  const weekRanges = getMondayWeekRanges(businessNow());
+  if (
+    distributionDate < weekRanges.currentWeekStart ||
+    distributionDate >= weekRanges.currentWeekEnd
+  )
+    throw new Error(
+      "Personal profit distributions must be dated within the current week."
+    );
+
+  const inserted = await db.insert(separateInventoryTransactions).values({
+    recordCode: "pending",
+    transactionDate: distributionDate,
+    transactionType: "personal_profit_distribution",
+    unitsDelta: 0,
+    cashCollectedCentavos: -amountCentavos,
+    description: "Personal profit distribution",
+    notes:
+      input.notes?.trim() || "Distributed from this week's personal net profit.",
+    createdBy: userId,
+    updatedBy: userId,
+  });
+  const id = Number((inserted as any)[0]?.insertId ?? (inserted as any).insertId);
+  const recordCode = makeRecordCode("personal-profit", distributionDate, id);
+  await db
+    .update(separateInventoryTransactions)
+    .set({ recordCode })
+    .where(eq(separateInventoryTransactions.id, id));
+  await recordAudit(
+    userId,
+    "distributed",
+    "separate_inventory_profit",
+    recordCode,
+    "Recorded a personal profit distribution without changing inventory or shared business totals.",
+    undefined,
+    {
+      amountCentavos,
+      availableBeforeCentavos: availableCentavos,
+      availableAfterCentavos: availableCentavos - amountCentavos,
+    }
+  );
+  return {
+    id,
+    recordCode,
+    amountCentavos,
+    availableToDistributeCentavos: availableCentavos - amountCentavos,
+  };
 }
 
 export async function addSeparateInventoryPurchase(

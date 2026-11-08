@@ -35,6 +35,7 @@ import {
   recordGaleTransitionWithdrawal,
   recordProfitDistribution,
   addSeparateInventoryAdjustment,
+  addSeparateInventoryProfitDistribution,
   addSeparateInventoryPurchase,
   addSeparateInventorySale,
   addSeparateInventoryWithdrawal,
@@ -194,6 +195,17 @@ export const appRouter = router({
       )
       .mutation(({ ctx, input }) =>
         addSeparateInventoryWithdrawal(ctx.user?.id ?? 0, input)
+      ),
+    addSeparateInventoryProfitDistribution: publicAccessProcedure
+      .input(
+        z.object({
+          date: day,
+          amountPesos: z.number().positive().max(10_000_000_000),
+          notes: z.string().max(2_000).optional(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        addSeparateInventoryProfitDistribution(ctx.user?.id ?? 0, input)
       ),
     addSale: publicAccessProcedure
       .input(

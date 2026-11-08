@@ -716,6 +716,11 @@ export default function Home() {
     description: "",
     notes: "",
   });
+  const [separateProfitDistribution, setSeparateProfitDistribution] = useState({
+    date: today(),
+    amount: "",
+    notes: "",
+  });
   const [separateAuditFilter, setSeparateAuditFilter] = useState({
     type: "all",
     category: "all",
@@ -948,6 +953,8 @@ export default function Home() {
         grossProfitCentavos: 0,
         expensesCentavos: 0,
         netProfitCentavos: 0,
+        distributedCentavos: 0,
+        availableToDistributeCentavos: 0,
         startDate: today(),
         endDate: today(),
       },
@@ -958,6 +965,8 @@ export default function Home() {
         grossProfitCentavos: 0,
         expensesCentavos: 0,
         netProfitCentavos: 0,
+        distributedCentavos: 0,
+        availableToDistributeCentavos: 0,
         startDate: daysAgo(7),
         endDate: daysAgo(1),
       },
@@ -1243,6 +1252,21 @@ export default function Home() {
           description: "",
           notes: "",
         }));
+        utils.business.separateInventory.invalidate();
+      },
+      onError: error => toast.error(error.message),
+    });
+  const addSeparateProfitDistribution =
+    trpc.business.addSeparateInventoryProfitDistribution.useMutation({
+      onSuccess: result => {
+        toast.success(
+          `Personal profit distribution saved: ${peso(result.amountCentavos)}.`
+        );
+        setSeparateProfitDistribution({
+          date: today(),
+          amount: "",
+          notes: "",
+        });
         utils.business.separateInventory.invalidate();
       },
       onError: error => toast.error(error.message),
@@ -4488,9 +4512,127 @@ export default function Home() {
             />
           </div>
           <p className="mt-2 text-[11px] text-[#716b97]">
-                Same shared-ledger sales total as the main dashboard · Monday to today
+            Same shared-ledger sales total as the main dashboard · Monday to today
           </p>
         </div>
+        <form
+          className="mt-4 rounded-xl border border-[#e7e3ff] bg-[#fff] p-4"
+          onSubmit={event => {
+            event.preventDefault();
+            const amount = Number(separateProfitDistribution.amount);
+            if (!amount || amount <= 0)
+              return toast.error("Enter a profit distribution amount greater than zero.");
+            addSeparateProfitDistribution.mutate({
+              date: separateProfitDistribution.date,
+              amountPesos: amount,
+              notes: separateProfitDistribution.notes || undefined,
+            });
+          }}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#6d5dfc]">
+                Personal settlement
+              </p>
+              <h4 className="mt-1 text-lg font-semibold text-[#17182b]">
+                Distribute this week’s personal profit
+              </h4>
+              <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
+                This works like the shared ledger: choose the amount to pay yourself,
+                or use the full automatically calculated amount available this week.
+                It reduces personal cash, not inventory or shared business totals.
+              </p>
+            </div>
+            <div className="rounded-lg bg-[#f0efff] px-3 py-2 text-right">
+              <p className="text-[10px] font-bold uppercase tracking-[.1em] text-[#6d5dfc]">
+                Available this week
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#5b4de1]">
+                {peso(separateInventory.weeklyProfit.current.availableToDistributeCentavos)}
+              </p>
+              <p className="text-[11px] text-[#716b97]">
+                Net profit less distributions
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Date</Label>
+              <input
+                required
+                type="date"
+                value={separateProfitDistribution.date}
+                onChange={event =>
+                  setSeparateProfitDistribution({
+                    ...separateProfitDistribution,
+                    date: event.target.value,
+                  })
+                }
+                className="field mt-1"
+              />
+            </div>
+            <div>
+              <Label>Amount to distribute (₱)</Label>
+              <div className="mt-1 flex gap-2">
+                <input
+                  required
+                  min="0.01"
+                  step="0.01"
+                  type="number"
+                  value={separateProfitDistribution.amount}
+                  onChange={event =>
+                    setSeparateProfitDistribution({
+                      ...separateProfitDistribution,
+                      amount: event.target.value,
+                    })
+                  }
+                  placeholder="0.00"
+                  className="field min-w-0 flex-1"
+                />
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap px-3 text-xs"
+                  onClick={() =>
+                    setSeparateProfitDistribution({
+                      ...separateProfitDistribution,
+                      amount: (
+                        separateInventory.weeklyProfit.current
+                          .availableToDistributeCentavos / 100
+                      ).toFixed(2),
+                    })
+                  }
+                >
+                  Use full amount
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3">
+            <Label>Notes</Label>
+            <input
+              value={separateProfitDistribution.notes}
+              onChange={event =>
+                setSeparateProfitDistribution({
+                  ...separateProfitDistribution,
+                  notes: event.target.value,
+                })
+              }
+              placeholder="Optional settlement note"
+              className="field mt-1"
+            />
+          </div>
+          <button
+            disabled={
+              addSeparateProfitDistribution.isPending ||
+              separateInventory.weeklyProfit.current.availableToDistributeCentavos <= 0
+            }
+            className="btn-primary mt-4 w-full justify-center"
+          >
+            {addSeparateProfitDistribution.isPending
+              ? "Recording distribution…"
+              : "Record personal profit distribution"}
+          </button>
+        </form>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {[
             {
@@ -4514,6 +4656,11 @@ export default function Home() {
               <p className="mt-1 text-xs opacity-70">
                 Gross {peso(item.grossProfitCentavos)} · Expenses {peso(item.expensesCentavos)}
               </p>
+              {label === "This week" && (
+                <p className="mt-1 text-xs opacity-70">
+                  Distributed {peso(item.distributedCentavos)} · Available {peso(item.availableToDistributeCentavos)}
+                </p>
+              )}
               <p className="mt-1 text-xs opacity-70">
                 {number(item.unitsSold)} units sold · {prettyDate(item.startDate)} – {prettyDate(item.endDate)}
               </p>
@@ -5048,6 +5195,7 @@ export default function Home() {
                 <option value="loss">Losses</option>
                 <option value="cash_adjustment">Cash adjustments</option>
                 <option value="personal_expense">Personal expenses</option>
+                <option value="personal_profit_distribution">Profit distributions</option>
               </select>
               <select
                 value={separateAuditFilter.category}
@@ -5111,6 +5259,8 @@ export default function Home() {
                     const profit =
                       row.transactionType === "personal_expense"
                         ? -Math.abs(row.cashCollectedCentavos)
+                        : row.transactionType === "personal_profit_distribution"
+                          ? 0
                         : row.revenueCentavos -
                           Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos;
                     return (
