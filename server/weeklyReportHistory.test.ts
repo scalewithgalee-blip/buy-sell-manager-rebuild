@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   businessNow,
   calculateBusinessAlerts,
+  calculateWeeklyUnitGoalProgress,
   calculateWeeklyReportHistory,
   startOfMondayUtc,
 } from "./db";
@@ -13,6 +14,28 @@ describe("business calendar rollover", () => {
     expect(startOfMondayUtc(localMonday).toISOString().slice(0, 10)).toBe(
       "2026-10-26"
     );
+  });
+});
+
+describe("weekly unit goal progress", () => {
+  it("shows sold units, remaining units, and capped goal state", () => {
+    expect(
+      calculateWeeklyUnitGoalProgress({ unitsSold: 325, targetUnits: 500 })
+    ).toMatchObject({
+      targetUnits: 500,
+      unitsSold: 325,
+      unitsRemaining: 175,
+      completionPercent: 65,
+      targetReached: false,
+    });
+
+    expect(
+      calculateWeeklyUnitGoalProgress({ unitsSold: 550, targetUnits: 500 })
+    ).toMatchObject({
+      unitsRemaining: 0,
+      completionPercent: 110,
+      targetReached: true,
+    });
   });
 });
 

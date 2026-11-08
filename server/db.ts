@@ -210,6 +210,21 @@ export function calculateSeparateInventoryPeriodMetrics(
   };
 }
 
+export function calculateWeeklyUnitGoalProgress(input: {
+  unitsSold: number;
+  targetUnits: number;
+}) {
+  const unitsSold = Math.max(0, input.unitsSold);
+  const targetUnits = Math.max(1, input.targetUnits);
+  return {
+    targetUnits,
+    unitsSold,
+    unitsRemaining: Math.max(0, targetUnits - unitsSold),
+    completionPercent: Math.round((unitsSold / targetUnits) * 10000) / 100,
+    targetReached: unitsSold >= targetUnits,
+  };
+}
+
 export async function getSeparateInventoryData(userId: number) {
   void userId;
   const db = await getDb();
@@ -237,6 +252,10 @@ export async function getSeparateInventoryData(userId: number) {
     weekRanges.previousWeekStart,
     weekRanges.previousWeekEnd
   );
+  const weeklyGoal = calculateWeeklyUnitGoalProgress({
+    unitsSold: currentWeekMetrics.unitsSold,
+    targetUnits: settings?.weeklyUnitsTarget ?? 100,
+  });
   return {
     rows: rows.slice(0, 200),
     weeklyProfit: {
@@ -251,6 +270,7 @@ export async function getSeparateInventoryData(userId: number) {
         endDate: dayKey(new Date(weekRanges.previousWeekEnd.getTime() - 86_400_000)),
       },
     },
+    weeklyGoal,
     ...calculateSeparateInventoryBalances(
       rows,
       settings?.unitsPerBox ?? 50,

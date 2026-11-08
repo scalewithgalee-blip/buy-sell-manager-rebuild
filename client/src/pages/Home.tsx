@@ -933,6 +933,13 @@ export default function Home() {
     cashBalanceCentavos: 0,
     totalWithdrawalsCentavos: 0,
     withdrawalTotalsByCategory: [],
+    weeklyGoal: {
+      targetUnits: dashboard.settings.weeklyUnitsTarget ?? 100,
+      unitsSold: 0,
+      unitsRemaining: dashboard.settings.weeklyUnitsTarget ?? 100,
+      completionPercent: 0,
+      targetReached: false,
+    },
     weeklyProfit: {
       current: {
         unitsSold: 0,
@@ -1729,8 +1736,8 @@ export default function Home() {
           onClick={() => setShowRetainedCashBreakdown(current => !current)}
         />
         <MetricCard
-          label="Weekly target"
-          info={`Tracks Monday-to-Sunday units sold against your saved ${number(weeklyUnitsTarget)}-unit weekly target. Change the target in Settings.`}
+          label="Weekly target (units / packs)"
+          info={`Tracks Monday-to-Sunday units sold (packs) against your saved ${number(weeklyUnitsTarget)}-unit weekly target. Change the target in Settings.`}
           value={`${number(dashboard.periods.week.unitsSold)} of ${number(weeklyUnitsTarget)}`}
           hint={
             weeklyUnitsRemaining > 0
@@ -4452,6 +4459,37 @@ export default function Home() {
             </p>
           </div>
           <ReceiptText className="h-7 w-7 text-[#6d5dfc]" />
+        </div>
+        <div className="mt-4 rounded-xl bg-[#f0efff] p-4 text-[#4f477f]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#6d5dfc]">
+                Weekly goal · units / packs
+              </p>
+              <p className="mt-1 text-lg font-semibold text-[#17182b]">
+                {number(separateInventory.weeklyGoal.unitsSold)} of {number(separateInventory.weeklyGoal.targetUnits)} sold
+              </p>
+              <p className="mt-1 text-xs text-[#716b97]">
+                {separateInventory.weeklyGoal.targetReached
+                  ? "Weekly goal reached"
+                  : `${number(separateInventory.weeklyGoal.unitsRemaining)} units / packs remaining`}
+              </p>
+            </div>
+            <p className="text-2xl font-semibold text-[#5b4de1]">
+              {number(Math.min(100, separateInventory.weeklyGoal.completionPercent))}%
+            </p>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/80">
+            <div
+              className="h-full rounded-full bg-[#6d5dfc] transition-[width] duration-300"
+              style={{
+                width: `${Math.max(0, Math.min(100, separateInventory.weeklyGoal.completionPercent))}%`,
+              }}
+            />
+          </div>
+          <p className="mt-2 text-[11px] text-[#716b97]">
+            Personal Separate Inventory sales · Monday to today
+          </p>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {[
