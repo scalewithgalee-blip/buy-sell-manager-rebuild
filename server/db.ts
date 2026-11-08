@@ -226,10 +226,13 @@ export function calculateWeeklyUnitGoalProgress(input: {
 }
 
 export async function getSeparateInventoryData(userId: number) {
-  void userId;
+  await ensureBusinessSetup(userId);
+  await ensureDailyReportingReadModel(userId);
   const db = await getDb();
   if (!db) throw new Error("Database is unavailable.");
-  const [rows, settingsRows] = await Promise.all([
+  const now = businessNow();
+  const weekRanges = getMondayWeekRanges(now);
+  const [rows, settingsRows, sharedWeekSummaryRows] = await Promise.all([
     db
       .select()
       .from(separateInventoryTransactions)
@@ -238,10 +241,17 @@ export async function getSeparateInventoryData(userId: number) {
         desc(separateInventoryTransactions.id)
       ),
     db.select().from(businessSettings).limit(1),
+    db
+      .select({ unitsSold: dailyReportSummaries.unitsSold })
+      .from(dailyReportSummaries)
+      .where(
+        and(
+          gte(dailyReportSummaries.summaryDate, weekRanges.currentWeekStart),
+          lt(dailyReportSummaries.summaryDate, weekRanges.currentWeekEnd)
+        )
+      ),
   ]);
   const settings = settingsRows[0];
-  const now = businessNow();
-  const weekRanges = getMondayWeekRanges(now);
   const currentWeekMetrics = calculateSeparateInventoryPeriodMetrics(
     rows,
     weekRanges.currentWeekStart,
@@ -253,7 +263,7 @@ export async function getSeparateInventoryData(userId: number) {
     weekRanges.previousWeekEnd
   );
   const weeklyGoal = calculateWeeklyUnitGoalProgress({
-    unitsSold: currentWeekMetrics.unitsSold,
+    unitsSold: sum(sharedWeekSummaryRows.map(row => row.unitsSold)),
     targetUnits: settings?.weeklyUnitsTarget ?? 100,
   });
   return {
