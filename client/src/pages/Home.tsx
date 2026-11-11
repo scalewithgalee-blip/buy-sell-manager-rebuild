@@ -646,6 +646,13 @@ export default function Home() {
   );
   const [customStartDate, setCustomStartDate] = useState(daysAgo(6));
   const [customEndDate, setCustomEndDate] = useState(today());
+  const [separateRhythmPeriod, setSeparateRhythmPeriod] = useState<
+    "week" | "month" | "custom"
+  >("week");
+  const [separateCustomStartDate, setSeparateCustomStartDate] = useState(
+    daysAgo(6)
+  );
+  const [separateCustomEndDate, setSeparateCustomEndDate] = useState(today());
   const [sale, setSale] = useState({
     date: today(),
     unitsSold: "",
@@ -945,6 +952,10 @@ export default function Home() {
       completionPercent: 0,
       targetReached: false,
     },
+    salesRhythm: {
+      week: { unitsSold: 0, revenueCentavos: 0, bestDayUnits: 0, data: [] },
+      month: { unitsSold: 0, revenueCentavos: 0, bestDayUnits: 0, data: [] },
+    },
     weeklyProfit: {
       current: {
         unitsSold: 0,
@@ -972,6 +983,71 @@ export default function Home() {
       },
     },
   }) as any;
+  const separateCustomRangeValid =
+    separateCustomStartDate.length === 10 &&
+    separateCustomEndDate.length === 10 &&
+    separateCustomStartDate <= separateCustomEndDate;
+  const separateCustomRhythm = useMemo(() => {
+    if (!separateCustomRangeValid)
+      return {
+        unitsSold: 0,
+        revenueCentavos: 0,
+        grossProfitCentavos: 0,
+        bestDayUnits: 0,
+        data: [],
+      };
+    const start = new Date(`${separateCustomStartDate}T12:00:00.000Z`);
+    const end = new Date(`${separateCustomEndDate}T12:00:00.000Z`);
+    end.setUTCDate(end.getUTCDate() + 1);
+    const sales = separateInventory.rows.filter((row: any) => {
+      if (row.transactionType !== "sale") return false;
+      const date = new Date(row.transactionDate);
+      return date >= start && date < end;
+    });
+    const dailyUnits = new Map<string, number>();
+    sales.forEach((row: any) => {
+      const key = new Date(row.transactionDate).toISOString().slice(0, 10);
+      dailyUnits.set(key, (dailyUnits.get(key) ?? 0) + Math.max(0, -row.unitsDelta));
+    });
+    const data: Array<{ date: string; units: number }> = [];
+    for (let cursor = new Date(start); cursor < end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      const date = cursor.toISOString().slice(0, 10);
+      data.push({ date, units: dailyUnits.get(date) ?? 0 });
+    }
+    const unitsSold = data.reduce((total, item) => total + item.units, 0);
+    const revenueCentavos = sales.reduce(
+      (total: number, row: any) => total + Math.max(0, row.revenueCentavos),
+      0
+    );
+    const cogsCentavos = sales.reduce(
+      (total: number, row: any) =>
+        total + Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos,
+      0
+    );
+    return {
+      unitsSold,
+      revenueCentavos,
+      grossProfitCentavos: revenueCentavos - cogsCentavos,
+      bestDayUnits: data.length ? Math.max(...data.map(item => item.units)) : 0,
+      data,
+    };
+  }, [separateCustomEndDate, separateCustomRangeValid, separateCustomStartDate, separateInventory.rows]);
+  const separateRhythmMetrics =
+    separateRhythmPeriod === "week"
+      ? separateInventory.salesRhythm.week
+      : separateRhythmPeriod === "month"
+        ? separateInventory.salesRhythm.month
+        : separateCustomRhythm;
+  const separateRhythmData = separateRhythmMetrics.data ?? [];
+  const separateRhythmChartData = separateRhythmData.map((entry: any, index: number) => ({
+    ...entry,
+    label:
+      separateRhythmPeriod === "week"
+        ? ["M", "T", "W", "T", "F", "S", "S"][index]
+        : separateRhythmPeriod === "month"
+          ? entry.label
+          : new Date(`${entry.date}T12:00:00Z`).getUTCDate(),
+  }));
   const filteredSeparateRows = useMemo(() => {
     const search = separateAuditFilter.search.trim().toLowerCase();
     return separateInventory.rows.filter((row: any) => {
@@ -4468,6 +4544,74 @@ export default function Home() {
           icon={ReceiptText}
         />
       </div>
+      <section className="panel mt-5 overflow-hidden">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#eeeef4] px-5 py-5">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#9699aa]">Personal revenue overview</p>
+            <h3 className="mt-1 text-xl font-semibold tracking-tight text-[#17182b]">Sales rhythm</h3>
+            <p className="mt-1 text-xs text-[#9699aa]">
+              {separateRhythmPeriod === "week"
+                ? "Monday to Sunday · current week"
+                : separateRhythmPeriod === "month"
+                  ? "January to December · current year"
+                  : separateCustomRangeValid
+                    ? `${prettyDate(separateCustomStartDate)} to ${prettyDate(separateCustomEndDate)}`
+                    : "Choose a valid start and end date"}
+            </p>
+          </div>
+          <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+            <select
+              aria-label="Personal sales rhythm period"
+              value={separateRhythmPeriod}
+              onChange={event => setSeparateRhythmPeriod(event.target.value as "week" | "month" | "custom")}
+              className="field h-10 w-full min-w-[124px] rounded-xl px-3 py-1 text-sm font-semibold sm:w-auto"
+            >
+              <option value="week">Weekly</option>
+              <option value="month">Monthly</option>
+              <option value="custom">Custom</option>
+            </select>
+            {separateRhythmPeriod === "custom" && (
+              <div className="flex flex-wrap items-end justify-end gap-2 rounded-xl border border-[#e8e9f1] bg-[#fafafd] p-2">
+                <label className="text-[9px] font-bold uppercase tracking-[.12em] text-[#777b91]">
+                  From
+                  <input type="date" value={separateCustomStartDate} max={separateCustomEndDate} onChange={event => setSeparateCustomStartDate(event.target.value)} className="field mt-1 h-9 w-[132px] px-2 text-xs font-medium normal-case tracking-normal" />
+                </label>
+                <label className="text-[9px] font-bold uppercase tracking-[.12em] text-[#777b91]">
+                  To
+                  <input type="date" value={separateCustomEndDate} min={separateCustomStartDate} max={today()} onChange={event => setSeparateCustomEndDate(event.target.value)} className="field mt-1 h-9 w-[132px] px-2 text-xs font-medium normal-case tracking-normal" />
+                </label>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="p-5">
+          {separateRhythmPeriod === "custom" && !separateCustomRangeValid && (
+            <div className="mb-4 rounded-xl bg-[#fff1ef] p-3 text-sm text-[#9d3f35]">Choose an end date on or after the start date.</div>
+          )}
+          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div><p className="text-xs text-[#8d90a2]">Revenue</p><p className="mt-1 font-semibold text-[#17182b]">{peso(separateRhythmMetrics.revenueCentavos)}</p></div>
+            <div><p className="text-xs text-[#8d90a2]">Gross profit</p><p className="mt-1 font-semibold text-[#5b4de1]">{peso(separateRhythmMetrics.grossProfitCentavos)}</p></div>
+            <div>
+              <p className="text-xs text-[#8d90a2]">Total units sold</p>
+              <p className="mt-1 font-semibold text-[#17182b]">{number(separateRhythmMetrics.unitsSold)} units</p>
+              {separateRhythmPeriod === "week" && <p className="mt-1 text-[11px] leading-4 text-[#8d90a2]">Personal sales · current week</p>}
+            </div>
+            <div><p className="text-xs text-[#8d90a2]">Best day</p><p className="mt-1 font-semibold text-[#17182b]">{number(separateRhythmMetrics.bestDayUnits)} units</p></div>
+          </div>
+          <div className="h-[220px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={separateRhythmChartData} margin={{ top: 18, right: 4, left: -26, bottom: 0 }}>
+                <defs><linearGradient id="separateSalesArea" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#7566f5" stopOpacity={0.28} /><stop offset="95%" stopColor="#7566f5" stopOpacity={0.02} /></linearGradient></defs>
+                <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#ececf3" />
+                <XAxis dataKey="label" axisLine={false} tickLine={false} interval={separateRhythmPeriod === "custom" ? "preserveStartEnd" : 0} padding={{ left: 8, right: 12 }} tick={{ fill: "#9799aa", fontSize: 10 }} dy={8} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#a3a5b3", fontSize: 10 }} allowDecimals={false} />
+                <ChartTooltip cursor={{ stroke: "#7566f5", strokeDasharray: "4 4" }} contentStyle={{ borderRadius: 12, border: "1px solid #e7e5f3", boxShadow: "0 10px 30px rgba(34,32,73,.12)", fontSize: 12 }} formatter={(value: any) => [`${number(Number(value))} units`, "Sold"]} />
+                <Area type="monotone" dataKey="units" stroke="#6d5dfc" strokeWidth={2.5} fill="url(#separateSalesArea)" activeDot={{ r: 5, strokeWidth: 3, fill: "#fff", stroke: "#6d5dfc" }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </section>
       <section className="panel mt-5 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

@@ -244,6 +244,93 @@ export function calculateWeeklyUnitGoalProgress(input: {
   };
 }
 
+export function calculateSeparateSalesRhythm(
+  rows: Array<{
+    transactionDate?: Date | string;
+    transactionType: string;
+    unitsDelta: number;
+    costPerUnitCentavos: number;
+    revenueCentavos: number;
+  }>,
+  now: Date
+) {
+  const sales = rows.filter(row => row.transactionType === "sale");
+  const calculateRange = (start: Date, end: Date) => {
+    const rangeSales = sales.filter(row => {
+      if (!row.transactionDate) return false;
+      const date = new Date(row.transactionDate);
+      return date >= start && date < end;
+    });
+    const byDay = new Map<string, number>();
+    rangeSales.forEach(row => {
+      const key = dayKey(new Date(row.transactionDate!));
+      byDay.set(key, (byDay.get(key) ?? 0) + Math.max(0, -row.unitsDelta));
+    });
+    const data = Array.from(
+      { length: Math.max(0, Math.ceil((end.getTime() - start.getTime()) / 86_400_000)) },
+      (_, index) => {
+        const date = new Date(start.getTime() + index * 86_400_000);
+        return { date: dayKey(date), units: byDay.get(dayKey(date)) ?? 0 };
+      }
+    );
+    const unitsSold = sum(data.map(item => item.units));
+    const revenueCentavos = sum(
+      rangeSales.map(row => Math.max(0, row.revenueCentavos))
+    );
+    const cogsCentavos = sum(
+      rangeSales.map(
+        row => Math.max(0, -row.unitsDelta) * row.costPerUnitCentavos
+      )
+    );
+    return {
+      unitsSold,
+      revenueCentavos,
+      grossProfitCentavos: revenueCentavos - cogsCentavos,
+      bestDayUnits: data.length ? Math.max(...data.map(item => item.units)) : 0,
+      data,
+    };
+  };
+
+  const weekRanges = getMondayWeekRanges(now);
+  const currentYear = now.getUTCFullYear();
+  const monthLabels = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const monthData = Array.from({ length: 12 }, (_, monthIndex) => {
+    const start = new Date(Date.UTC(currentYear, monthIndex, 1));
+    const end = new Date(Date.UTC(currentYear, monthIndex + 1, 1));
+    const metrics = calculateRange(start, end);
+    return {
+      date: dayKey(start),
+      label: monthLabels[monthIndex],
+      units: metrics.unitsSold,
+      revenueCentavos: metrics.revenueCentavos,
+      grossProfitCentavos: metrics.grossProfitCentavos,
+      bestDayUnits: metrics.bestDayUnits,
+    };
+  });
+  const weekMetrics = calculateRange(
+    weekRanges.currentWeekStart,
+    weekRanges.currentWeekEnd
+  );
+  const weekChartEnd = new Date(
+    weekRanges.currentWeekStart.getTime() + 7 * 86_400_000
+  );
+  const week = {
+    ...weekMetrics,
+    data: calculateRange(weekRanges.currentWeekStart, weekChartEnd).data,
+  };
+  const month = {
+    unitsSold: sum(monthData.map(item => item.units)),
+    revenueCentavos: sum(monthData.map(item => item.revenueCentavos)),
+    grossProfitCentavos: sum(monthData.map(item => item.grossProfitCentavos)),
+    bestDayUnits: Math.max(...monthData.map(item => item.bestDayUnits)),
+      data: monthData.map(({ bestDayUnits: _bestDayUnits, grossProfitCentavos: _grossProfitCentavos, ...item }) => item),
+  };
+  return { week, month };
+}
+
 export async function getSeparateInventoryData(userId: number) {
   await ensureBusinessSetup(userId);
   await ensureDailyReportingReadModel(userId);
@@ -300,6 +387,7 @@ export async function getSeparateInventoryData(userId: number) {
       },
     },
     weeklyGoal,
+    salesRhythm: calculateSeparateSalesRhythm(rows, now),
     ...calculateSeparateInventoryBalances(
       rows,
       settings?.unitsPerBox ?? 50,

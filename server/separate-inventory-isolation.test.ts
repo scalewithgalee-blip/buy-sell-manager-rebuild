@@ -3,6 +3,7 @@ import {
   calculateNextBoxFundBalance,
   calculateSeparateInventoryBalances,
   calculateSeparateInventoryPeriodMetrics,
+  calculateSeparateSalesRhythm,
 } from "./db";
 
 describe("separate inventory ledger isolation", () => {
@@ -137,5 +138,43 @@ describe("separate inventory ledger isolation", () => {
     expect(thisWeek.unitsSold).toBe(10);
     expect(lastWeek.grossProfitCentavos).toBe(0);
     expect(lastWeek.unitsSold).toBe(0);
+  });
+
+  it("builds personal Sales Rhythm series with shared weekly and yearly boundaries", () => {
+    const rows = [
+      {
+        transactionDate: new Date("2026-11-09T12:00:00.000Z"),
+        transactionType: "sale",
+        unitsDelta: -10,
+        costPerUnitCentavos: 70_000,
+        revenueCentavos: 1_000_000,
+      },
+      {
+        transactionDate: new Date("2026-11-11T12:00:00.000Z"),
+        transactionType: "sale",
+        unitsDelta: -5,
+        costPerUnitCentavos: 70_000,
+        revenueCentavos: 450_000,
+      },
+      {
+        transactionDate: new Date("2026-11-08T12:00:00.000Z"),
+        transactionType: "sale",
+        unitsDelta: -99,
+        costPerUnitCentavos: 70_000,
+        revenueCentavos: 9_900_000,
+      },
+    ];
+
+    const rhythm = calculateSeparateSalesRhythm(
+      rows,
+      new Date("2026-11-11T12:00:00.000Z")
+    );
+
+    expect(rhythm.week.unitsSold).toBe(15);
+    expect(rhythm.week.grossProfitCentavos).toBe(400_000);
+    expect(rhythm.week.bestDayUnits).toBe(10);
+    expect(rhythm.week.data).toHaveLength(7);
+    expect(rhythm.month.unitsSold).toBe(114);
+    expect(rhythm.month.data).toHaveLength(12);
   });
 });
