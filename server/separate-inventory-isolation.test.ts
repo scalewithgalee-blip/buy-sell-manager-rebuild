@@ -4,6 +4,7 @@ import {
   calculateSeparateInventoryBalances,
   calculateSeparateInventoryPeriodMetrics,
   calculateSeparateSalesRhythm,
+  calculateWeeklyUnitGoalProgress,
 } from "./db";
 
 describe("separate inventory ledger isolation", () => {
@@ -176,5 +177,17 @@ describe("separate inventory ledger isolation", () => {
     expect(rhythm.week.data).toHaveLength(7);
     expect(rhythm.month.unitsSold).toBe(114);
     expect(rhythm.month.data).toHaveLength(12);
+  });
+
+  it("keeps the 500-unit target but measures personal weekly sales independently", () => {
+    const personalGoal = calculateWeeklyUnitGoalProgress({
+      unitsSold: 12,
+      targetUnits: 500,
+    });
+
+    expect(personalGoal.targetUnits).toBe(500);
+    expect(personalGoal.unitsSold).toBe(12);
+    expect(personalGoal.unitsRemaining).toBe(488);
+    expect(personalGoal.completionPercent).toBe(2.4);
   });
 });

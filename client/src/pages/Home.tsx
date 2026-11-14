@@ -4632,7 +4632,7 @@ export default function Home() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#6d5dfc]">
-                Shared weekly goal · units / packs
+                Personal weekly goal · units / packs
               </p>
               <p className="mt-1 text-lg font-semibold text-[#17182b]">
                 {number(separateInventory.weeklyGoal.unitsSold)} of {number(separateInventory.weeklyGoal.targetUnits)} sold
@@ -4656,7 +4656,7 @@ export default function Home() {
             />
           </div>
           <p className="mt-2 text-[11px] text-[#716b97]">
-            Same shared-ledger sales total as the main dashboard · Monday to today
+            Personal sales total only · same configured target as the shared ledger · Monday to today
           </p>
         </div>
         <form
