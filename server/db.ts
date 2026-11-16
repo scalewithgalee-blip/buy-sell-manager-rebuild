@@ -449,24 +449,29 @@ export async function addSeparateInventoryProfitDistribution(
   if (amountCentavos <= 0)
     throw new Error("Profit distribution must be greater than zero.");
 
-  const existing = await getSeparateInventoryData(userId);
-  const availableCentavos =
-    existing.weeklyProfit.current.availableToDistributeCentavos;
+  const distributionDate = dateAtNoonUtc(input.date);
+  const selectedWeekStart = startOfMondayUtc(distributionDate);
+  const selectedWeekEnd = new Date(
+    selectedWeekStart.getTime() + 7 * 86_400_000
+  );
+  const currentWeekStart = startOfMondayUtc(businessNow());
+  if (selectedWeekStart > currentWeekStart)
+    throw new Error("Personal profit distributions cannot be dated in a future week.");
+
+  const rows = await db
+    .select()
+    .from(separateInventoryTransactions);
+  const selectedWeekMetrics = calculateSeparateInventoryPeriodMetrics(
+    rows,
+    selectedWeekStart,
+    selectedWeekEnd
+  );
+  const availableCentavos = selectedWeekMetrics.availableToDistributeCentavos;
   if (amountCentavos > availableCentavos)
     throw new Error(
       `Only ₱${(availableCentavos / 100).toLocaleString("en-PH", {
         minimumFractionDigits: 2,
-      })} of this week's personal profit is available to distribute.`
-    );
-
-  const distributionDate = dateAtNoonUtc(input.date);
-  const weekRanges = getMondayWeekRanges(businessNow());
-  if (
-    distributionDate < weekRanges.currentWeekStart ||
-    distributionDate >= weekRanges.currentWeekEnd
-  )
-    throw new Error(
-      "Personal profit distributions must be dated within the current week."
+      })} of the selected week's personal profit is available to distribute.`
     );
 
   const inserted = await db.insert(separateInventoryTransactions).values({
@@ -477,7 +482,8 @@ export async function addSeparateInventoryProfitDistribution(
     cashCollectedCentavos: -amountCentavos,
     description: "Personal profit distribution",
     notes:
-      input.notes?.trim() || "Distributed from this week's personal net profit.",
+      input.notes?.trim() ||
+      `Distributed from the week of ${dayKey(selectedWeekStart)} personal net profit.`,
     createdBy: userId,
     updatedBy: userId,
   });

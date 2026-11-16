@@ -983,6 +983,19 @@ export default function Home() {
       },
     },
   }) as any;
+  const selectedSettlementWeek =
+    separateProfitDistribution.date >= separateInventory.weeklyProfit.current.startDate
+      ? separateInventory.weeklyProfit.current
+      : separateProfitDistribution.date >= separateInventory.weeklyProfit.previous.startDate
+        ? separateInventory.weeklyProfit.previous
+        : null;
+  const selectedSettlementAvailableCentavos =
+    selectedSettlementWeek?.availableToDistributeCentavos ?? 0;
+  const selectedSettlementWeekLabel = selectedSettlementWeek
+    ? selectedSettlementWeek === separateInventory.weeklyProfit.current
+      ? "This week"
+      : "Last week"
+    : "An earlier week";
   const separateCustomRangeValid =
     separateCustomStartDate.length === 10 &&
     separateCustomEndDate.length === 10 &&
@@ -4679,20 +4692,20 @@ export default function Home() {
                 Personal settlement
               </p>
               <h4 className="mt-1 text-lg font-semibold text-[#17182b]">
-                Distribute this week’s personal profit
+                Distribute personal profit from a selected week
               </h4>
               <p className="mt-1 text-sm leading-5 text-[#8d90a2]">
-                This works like the shared ledger: choose the amount to pay yourself,
-                or use the full automatically calculated amount available this week.
+                Select this week or last week, then choose the amount to pay yourself,
+                or use the full undistributed amount for that week.
                 It reduces personal cash, not inventory or shared business totals.
               </p>
             </div>
             <div className="rounded-lg bg-[#f0efff] px-3 py-2 text-right">
               <p className="text-[10px] font-bold uppercase tracking-[.1em] text-[#6d5dfc]">
-                Available this week
+                Available for {selectedSettlementWeekLabel.toLowerCase()}
               </p>
               <p className="mt-1 text-lg font-semibold text-[#5b4de1]">
-                {peso(separateInventory.weeklyProfit.current.availableToDistributeCentavos)}
+                {peso(selectedSettlementAvailableCentavos)}
               </p>
               <p className="text-[11px] text-[#716b97]">
                 Net profit less distributions
@@ -4710,6 +4723,7 @@ export default function Home() {
                   setSeparateProfitDistribution({
                     ...separateProfitDistribution,
                     date: event.target.value,
+                    amount: "",
                   })
                 }
                 className="field mt-1"
@@ -4738,10 +4752,9 @@ export default function Home() {
                   className="btn-secondary whitespace-nowrap px-3 text-xs"
                   onClick={() =>
                     setSeparateProfitDistribution({
-                      ...separateProfitDistribution,
-                      amount: (
-                        separateInventory.weeklyProfit.current
-                          .availableToDistributeCentavos / 100
+                        ...separateProfitDistribution,
+                        amount: (
+                        selectedSettlementAvailableCentavos / 100
                       ).toFixed(2),
                     })
                   }
@@ -4768,7 +4781,7 @@ export default function Home() {
           <button
             disabled={
               addSeparateProfitDistribution.isPending ||
-              separateInventory.weeklyProfit.current.availableToDistributeCentavos <= 0
+              selectedSettlementAvailableCentavos <= 0
             }
             className="btn-primary mt-4 w-full justify-center"
           >
@@ -4800,11 +4813,9 @@ export default function Home() {
               <p className="mt-1 text-xs opacity-70">
                 Gross {peso(item.grossProfitCentavos)} · Expenses {peso(item.expensesCentavos)}
               </p>
-              {label === "This week" && (
-                <p className="mt-1 text-xs opacity-70">
-                  Distributed {peso(item.distributedCentavos)} · Available {peso(item.availableToDistributeCentavos)}
-                </p>
-              )}
+              <p className="mt-1 text-xs opacity-70">
+                Distributed {peso(item.distributedCentavos)} · Available {peso(item.availableToDistributeCentavos)}
+              </p>
               <p className="mt-1 text-xs opacity-70">
                 {number(item.unitsSold)} units sold · {prettyDate(item.startDate)} – {prettyDate(item.endDate)}
               </p>

@@ -190,4 +190,33 @@ describe("separate inventory ledger isolation", () => {
     expect(personalGoal.unitsRemaining).toBe(488);
     expect(personalGoal.completionPercent).toBe(2.4);
   });
+
+  it("keeps prior-week personal profit available for later settlement", () => {
+    const rows = [
+      {
+        transactionDate: new Date("2026-11-09T12:00:00.000Z"),
+        transactionType: "sale",
+        unitsDelta: -10,
+        costPerUnitCentavos: 70_000,
+        revenueCentavos: 1_000_000,
+        cashCollectedCentavos: 1_000_000,
+      },
+      {
+        transactionDate: new Date("2026-11-12T12:00:00.000Z"),
+        transactionType: "personal_profit_distribution",
+        unitsDelta: 0,
+        costPerUnitCentavos: 0,
+        revenueCentavos: 0,
+        cashCollectedCentavos: -200_000,
+      },
+    ];
+    const priorWeek = calculateSeparateInventoryPeriodMetrics(
+      rows,
+      new Date("2026-11-09T00:00:00.000Z"),
+      new Date("2026-11-16T00:00:00.000Z")
+    );
+
+    expect(priorWeek.grossProfitCentavos).toBe(300_000);
+    expect(priorWeek.availableToDistributeCentavos).toBe(100_000);
+  });
 });
