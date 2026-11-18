@@ -147,6 +147,7 @@ const demo = {
   inventoryUnits: 300,
   inventoryBoxes: 6,
   inventoryValueCentavos: 21000000,
+  inventoryValueUsesCurrentPosition: false,
   totalOwnerCapitalCentavos: 21000000,
   nextBoxFundCentavos: 0,
   capitalBalancedNextBoxFundCentavos: 0,
@@ -1831,7 +1832,7 @@ export default function Home() {
           label="Inventory"
           info="Current physical units remaining, converted to box equivalents using the saved units-per-box setting."
           value={`${number(dashboard.inventoryUnits)} units`}
-          hint={`${number(dashboard.inventoryBoxes, 2)} boxes · ${peso(dashboard.inventoryValueCentavos)} tied up`}
+          hint={`${number(dashboard.inventoryBoxes, 2)} boxes · ${peso(dashboard.inventoryValueCentavos)} ${dashboard.inventoryValueUsesCurrentPosition ? "current position value" : "tied up"}`}
           tone="amber"
           icon={Package}
         />
@@ -1974,14 +1975,17 @@ export default function Home() {
             </div>
             <div className="rounded-lg bg-[#f7f7fb] p-3">
               <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#8d90a2]">
-                Inventory value at cost
+                {dashboard.inventoryValueUsesCurrentPosition
+                  ? "Current inventory value"
+                  : "Inventory value at cost"}
               </p>
               <p className="mt-1 text-lg font-semibold text-[#17182b]">
                 {peso(dashboard.inventoryValueCentavos)}
               </p>
               <p className="mt-1 text-[11px] text-[#8d90a2]">
-                {number(dashboard.inventoryUnits)} ×{" "}
-                {peso(dashboard.settings.defaultCostPerUnitCentavos)} per unit
+                {dashboard.inventoryValueUsesCurrentPosition
+                  ? "Current position: owner capital less reconciled cash"
+                  : `${number(dashboard.inventoryUnits)} × ${peso(dashboard.settings.defaultCostPerUnitCentavos)} per unit`}
               </p>
             </div>
             <div className="rounded-lg bg-[#f0efff] p-3">

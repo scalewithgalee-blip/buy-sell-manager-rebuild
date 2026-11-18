@@ -1289,16 +1289,32 @@ export function calculateInventoryValue(
   return Math.max(units, 0) * costPerUnitCentavos;
 }
 
+/**
+ * Uses the latest manual cash reconciliation to display the current physical
+ * position without rewriting the configured cost basis or historical COGS.
+ */
+export function calculateCurrentPositionInventoryValue(input: {
+  ownerCapitalCentavos: number;
+  actualCashCentavos: number;
+  fallbackInventoryValueCentavos: number;
+}) {
+  const reconciledValue =
+    input.ownerCapitalCentavos - input.actualCashCentavos;
+  return reconciledValue >= 0
+    ? reconciledValue
+    : input.fallbackInventoryValueCentavos;
+}
+
 export function calculateBusinessPosition(input: {
   inventoryUnits: number;
   unitsPerBox: number;
   costPerUnitCentavos: number;
   ownerCapitalCentavos: number;
+  inventoryValueOverrideCentavos?: number;
 }) {
-  const inventoryValueCentavos = calculateInventoryValue(
-    input.inventoryUnits,
-    input.costPerUnitCentavos
-  );
+  const inventoryValueCentavos =
+    input.inventoryValueOverrideCentavos ??
+    calculateInventoryValue(input.inventoryUnits, input.costPerUnitCentavos);
   const ownerCapitalCentavos = Math.max(input.ownerCapitalCentavos, 0);
   const capitalDeployedCentavos = Math.min(
     ownerCapitalCentavos,
@@ -3276,16 +3292,26 @@ export async function getDashboardData(userId: number) {
   const totalOwnerCapitalCentavos = sum(
     ownerSummaries.map(owner => owner.currentCapitalCentavos)
   );
+  const currentPositionUsesCashReconciliation = Boolean(cashReconciliation);
+  const currentPositionInventoryValueCentavos =
+    currentPositionUsesCashReconciliation
+      ? calculateCurrentPositionInventoryValue({
+          ownerCapitalCentavos: totalOwnerCapitalCentavos,
+          actualCashCentavos: nextBoxFund.availableCentavos,
+          fallbackInventoryValueCentavos: inventoryValueCentavos,
+        })
+      : inventoryValueCentavos;
   const businessPosition = calculateBusinessPosition({
     inventoryUnits,
     unitsPerBox: settings.unitsPerBox,
     costPerUnitCentavos: settings.defaultCostPerUnitCentavos,
     ownerCapitalCentavos: totalOwnerCapitalCentavos,
+    inventoryValueOverrideCentavos: currentPositionInventoryValueCentavos,
   });
   const capitalBalancedNextBoxFundCentavos =
     calculateCapitalBalancedNextBoxFund({
       ownerCapitalCentavos: totalOwnerCapitalCentavos,
-      inventoryValueCentavos,
+      inventoryValueCentavos: currentPositionInventoryValueCentavos,
     });
   const capitalBalancedInventoryTrace = calculateCapitalBalancedInventoryTrace({
     ownerCapitalCentavos: totalOwnerCapitalCentavos,
@@ -3293,7 +3319,7 @@ export async function getDashboardData(userId: number) {
     inventory: currentInventoryRows,
   });
   const capitalReconciliationDeltaCentavos =
-    inventoryValueCentavos +
+    currentPositionInventoryValueCentavos +
     capitalBalancedNextBoxFundCentavos -
     totalOwnerCapitalCentavos;
   const weeklyCapitalPositionHistory = calculateWeeklyCapitalPositionHistoryFromSummaries({
@@ -3352,7 +3378,8 @@ export async function getDashboardData(userId: number) {
     product,
     inventoryUnits,
     inventoryBoxes: inventoryUnits / settings.unitsPerBox,
-    inventoryValueCentavos,
+    inventoryValueCentavos: currentPositionInventoryValueCentavos,
+    inventoryValueUsesCurrentPosition: currentPositionUsesCashReconciliation,
     retainedCash,
     operatingCash: retainedCash,
     nextBoxFund,

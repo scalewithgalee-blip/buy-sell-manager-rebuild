@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateCapitalBalancedNextBoxFund,
   calculateCashBasedNextBoxFund,
+  calculateCurrentPositionInventoryValue,
   calculateWeeklyCapitalPositionHistory,
 } from "./db";
 
@@ -18,6 +19,22 @@ const empty = {
 };
 
 describe("cash-based Next Box Fund", () => {
+  it("uses the reconciled current position without changing the configured cost basis", () => {
+    const currentInventoryValue = calculateCurrentPositionInventoryValue({
+      ownerCapitalCentavos: 21_000_000,
+      actualCashCentavos: 4_140_000,
+      fallbackInventoryValueCentavos: 281 * 70_000,
+    });
+
+    expect(currentInventoryValue).toBe(16_860_000);
+    expect(
+      calculateCapitalBalancedNextBoxFund({
+        ownerCapitalCentavos: 21_000_000,
+        inventoryValueCentavos: currentInventoryValue,
+      })
+    ).toBe(4_140_000);
+  });
+
   it("balances the displayed fund to current owner capital after inventory changes", () => {
     const result = calculateCapitalBalancedNextBoxFund({
       ownerCapitalCentavos: 21_000_000,
